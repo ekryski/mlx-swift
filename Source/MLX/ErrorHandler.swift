@@ -282,9 +282,22 @@ private let errorHandler: ErrorHandler = {
     return ErrorHandler()
 }()
 
+/// Fast-path flag to avoid repeated lazy-global access after first initialization.
+/// `nonisolated(unsafe)` is safe here because the transition is monotonic (false -> true)
+/// and a redundant `initError` call is harmless.
+#if swift(>=5.10)
+    nonisolated(unsafe) private var _errorInitialized = false
+#else
+    private var _errorInitialized = false
+#endif
+
 /// Ensure that the error handler is installed.
+/// After the first call, this is a single boolean load on the hot path.
+@inline(__always)
 func initError() {
+    if _errorInitialized { return }
     _ = errorHandler
+    _errorInitialized = true
 }
 
 /// Forward the error to the `ErrorHandler` singleton.  See `errorHandler` (above) for how this is

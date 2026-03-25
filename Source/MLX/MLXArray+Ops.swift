@@ -2526,7 +2526,9 @@ extension MLXArray {
         -> MLXArray
     {
         var result = mlx_array_new()
-        mlx_reshape(&result, ctx, newShape.asInt32, newShape.count, stream.ctx)
+        Array(newShape).withInt32Buffer { buf in
+            mlx_reshape(&result, ctx, buf.baseAddress!, buf.count, stream.ctx)
+        }
         return MLXArray(result)
     }
 
@@ -2548,7 +2550,9 @@ extension MLXArray {
     /// - ``reshaped(_:stream:)``
     public func reshaped(_ newShape: Int..., stream: StreamOrDevice = .default) -> MLXArray {
         var result = mlx_array_new()
-        mlx_reshape(&result, ctx, newShape.asInt32, newShape.count, stream.ctx)
+        newShape.withInt32Buffer { buf in
+            mlx_reshape(&result, ctx, buf.baseAddress!, buf.count, stream.ctx)
+        }
         return MLXArray(result)
     }
 
@@ -2924,7 +2928,9 @@ extension MLXArray {
         -> MLXArray
     {
         var result = mlx_array_new()
-        mlx_transpose_axes(&result, ctx, axes.asInt32, axes.count, stream.ctx)
+        Array(axes).withInt32Buffer { buf in
+            mlx_transpose_axes(&result, ctx, buf.baseAddress!, buf.count, stream.ctx)
+        }
         return MLXArray(result)
     }
 
@@ -2942,7 +2948,9 @@ extension MLXArray {
     /// - ``transposed(_:axes:stream:)``
     public func transposed(_ axes: Int..., stream: StreamOrDevice = .default) -> MLXArray {
         var result = mlx_array_new()
-        mlx_transpose_axes(&result, ctx, axes.asInt32, axes.count, stream.ctx)
+        axes.withInt32Buffer { buf in
+            mlx_transpose_axes(&result, ctx, buf.baseAddress!, buf.count, stream.ctx)
+        }
         return MLXArray(result)
     }
 

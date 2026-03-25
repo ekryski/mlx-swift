@@ -1430,7 +1430,9 @@ public func reshaped(
     -> MLXArray
 {
     var result = mlx_array_new()
-    mlx_reshape(&result, array.ctx, newShape.asInt32, newShape.count, stream.ctx)
+    Array(newShape).withInt32Buffer { buf in
+        mlx_reshape(&result, array.ctx, buf.baseAddress!, buf.count, stream.ctx)
+    }
     return MLXArray(result)
 }
 
@@ -1450,7 +1452,9 @@ public func reshaped(_ array: MLXArray, _ newShape: Int..., stream: StreamOrDevi
     -> MLXArray
 {
     var result = mlx_array_new()
-    mlx_reshape(&result, array.ctx, newShape.asInt32, newShape.count, stream.ctx)
+    newShape.withInt32Buffer { buf in
+        mlx_reshape(&result, array.ctx, buf.baseAddress!, buf.count, stream.ctx)
+    }
     return MLXArray(result)
 }
 
@@ -1642,7 +1646,9 @@ public func squeezed(
     _ array: MLXArray, axes: some Collection<Int>, stream: StreamOrDevice = .default
 ) -> MLXArray {
     var result = mlx_array_new()
-    mlx_squeeze_axes(&result, array.ctx, axes.asInt32, axes.count, stream.ctx)
+    Array(axes).withInt32Buffer { buf in
+        mlx_squeeze_axes(&result, array.ctx, buf.baseAddress!, buf.count, stream.ctx)
+    }
     return MLXArray(result)
 }
 
@@ -1695,7 +1701,9 @@ public func sum(
     stream: StreamOrDevice = .default
 ) -> MLXArray {
     var result = mlx_array_new()
-    mlx_sum_axes(&result, array.ctx, axes.asInt32, axes.count, keepDims, stream.ctx)
+    Array(axes).withInt32Buffer { buf in
+        mlx_sum_axes(&result, array.ctx, buf.baseAddress!, buf.count, keepDims, stream.ctx)
+    }
     return MLXArray(result)
 }
 
@@ -1831,7 +1839,9 @@ public func transposed(
     -> MLXArray
 {
     var result = mlx_array_new()
-    mlx_transpose_axes(&result, array.ctx, axes.asInt32, axes.count, stream.ctx)
+    Array(axes).withInt32Buffer { buf in
+        mlx_transpose_axes(&result, array.ctx, buf.baseAddress!, buf.count, stream.ctx)
+    }
     return MLXArray(result)
 }
 
@@ -1839,7 +1849,9 @@ public func transposed(_ array: MLXArray, _ axes: Int..., stream: StreamOrDevice
     -> MLXArray
 {
     var result = mlx_array_new()
-    mlx_transpose_axes(&result, array.ctx, axes.asInt32, axes.count, stream.ctx)
+    axes.withInt32Buffer { buf in
+        mlx_transpose_axes(&result, array.ctx, buf.baseAddress!, buf.count, stream.ctx)
+    }
     return MLXArray(result)
 }
 

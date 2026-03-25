@@ -486,7 +486,9 @@ public func broadcast(
     -> MLXArray
 {
     var result = mlx_array_new()
-    mlx_broadcast_to(&result, array.ctx, shape.asInt32, shape.count, stream.ctx)
+    Array(shape).withInt32Buffer { buf in
+        mlx_broadcast_to(&result, array.ctx, buf.baseAddress!, buf.count, stream.ctx)
+    }
     return MLXArray(result)
 }
 
@@ -1335,7 +1337,9 @@ public func expandedDimensions(
     -> MLXArray
 {
     var result = mlx_array_new()
-    mlx_expand_dims_axes(&result, array.ctx, axes.asInt32, axes.count, stream.ctx)
+    Array(axes).withInt32Buffer { buf in
+        mlx_expand_dims_axes(&result, array.ctx, buf.baseAddress!, buf.count, stream.ctx)
+    }
     return MLXArray(result)
 }
 
@@ -2655,7 +2659,9 @@ public func softmax(
     stream: StreamOrDevice = .default
 ) -> MLXArray {
     var result = mlx_array_new()
-    mlx_softmax_axes(&result, array.ctx, axes.asInt32, axes.count, precise, stream.ctx)
+    Array(axes).withInt32Buffer { buf in
+        mlx_softmax_axes(&result, array.ctx, buf.baseAddress!, buf.count, precise, stream.ctx)
+    }
     return MLXArray(result)
 }
 

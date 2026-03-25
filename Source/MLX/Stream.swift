@@ -30,12 +30,36 @@ public struct StreamOrDevice: Sendable, CustomStringConvertible, Equatable {
         self.stream = stream
     }
 
+    /// Pre-cached GPU StreamOrDevice to avoid repeated allocation for the common case.
+    private static let _cachedGPU = StreamOrDevice(.gpu)
+
+    /// Pre-cached CPU StreamOrDevice for the less common CPU default case.
+    private static let _cachedCPU = StreamOrDevice(.cpu)
+
     /// The default stream on the default device.
     ///
     /// This will be ``Device/gpu`` unless ``Device/setDefault(device:)``
     /// sets it otherwise.
+    ///
+    /// Optimized: checks TaskLocal stream first, then returns a cached instance
+    /// for the common GPU/CPU cases to avoid repeated StreamOrDevice allocations
+    /// and redundant TaskLocal lookups.
     public static var `default`: StreamOrDevice {
-        StreamOrDevice(Stream.defaultStream ?? Device.defaultStream())
+        // Fast path: if a TaskLocal stream override is active, use it directly.
+        if let taskStream = Stream.defaultStream {
+            return StreamOrDevice(taskStream)
+        }
+        // Common case: return a cached instance matching the default device.
+        // This avoids constructing a new StreamOrDevice struct on every operation.
+        let device = Device._tlDefaultDevice
+        if device === Device.gpu {
+            return _cachedGPU
+        }
+        if device === Device.cpu {
+            return _cachedCPU
+        }
+        // Fallback for custom devices (rare)
+        return StreamOrDevice(device.defaultStream)
     }
 
     public static func device(_ device: Device) -> StreamOrDevice {
