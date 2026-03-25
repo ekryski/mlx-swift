@@ -1179,9 +1179,9 @@ extension MLXArray {
     /// ### See Also
     /// - <doc:arithmetic>
     public func abs(stream: StreamOrDevice = .default) -> MLXArray {
-        var result = mlx_array_new()
-        mlx_abs(&result, ctx, stream.ctx)
-        return MLXArray(result)
+        let result = mlx_fast_alloc_array()!
+        mlx_fast_abs(result, ctx.ctx, stream.ctx.ctx)
+        return MLXArray(mlx_array(ctx: result))
     }
 
     /// An `and` reduction over the given axes.
@@ -1392,9 +1392,9 @@ extension MLXArray {
     public func argMax(axis: Int, keepDims: Bool = false, stream: StreamOrDevice = .default)
         -> MLXArray
     {
-        var result = mlx_array_new()
-        mlx_argmax_axis(&result, ctx, axis.int32, keepDims, stream.ctx)
-        return MLXArray(result)
+        let result = mlx_fast_alloc_array()!
+        mlx_fast_argmax_axis(result, ctx.ctx, axis.int32, keepDims, stream.ctx.ctx)
+        return MLXArray(mlx_array(ctx: result))
     }
 
     /// Indices of the maximum value over the entire array.
@@ -1416,9 +1416,9 @@ extension MLXArray {
     /// - ``argMin(axis:keepDims:stream:)``
     /// - ``argMax(_:axis:keepDims:stream:)``
     public func argMax(keepDims: Bool = false, stream: StreamOrDevice = .default) -> MLXArray {
-        var result = mlx_array_new()
-        mlx_argmax(&result, ctx, keepDims, stream.ctx)
-        return MLXArray(result)
+        let result = mlx_fast_alloc_array()!
+        mlx_fast_argmax_all(result, ctx.ctx, keepDims, stream.ctx.ctx)
+        return MLXArray(mlx_array(ctx: result))
     }
 
     /// Indices of the minimum values along the axis.
@@ -1443,9 +1443,9 @@ extension MLXArray {
     public func argMin(axis: Int, keepDims: Bool = false, stream: StreamOrDevice = .default)
         -> MLXArray
     {
-        var result = mlx_array_new()
-        mlx_argmin_axis(&result, ctx, axis.int32, keepDims, stream.ctx)
-        return MLXArray(result)
+        let result = mlx_fast_alloc_array()!
+        mlx_fast_argmin_axis(result, ctx.ctx, axis.int32, keepDims, stream.ctx.ctx)
+        return MLXArray(mlx_array(ctx: result))
     }
 
     /// Indices of the minimum value over the entire array.
@@ -1467,9 +1467,9 @@ extension MLXArray {
     /// - ``argMax(axis:keepDims:stream:)``
     /// - ``argMin(_:axis:keepDims:stream:)``
     public func argMin(keepDims: Bool = false, stream: StreamOrDevice = .default) -> MLXArray {
-        var result = mlx_array_new()
-        mlx_argmin(&result, ctx, keepDims, stream.ctx)
-        return MLXArray(result)
+        let result = mlx_fast_alloc_array()!
+        mlx_fast_argmin_all(result, ctx.ctx, keepDims, stream.ctx.ctx)
+        return MLXArray(mlx_array(ctx: result))
     }
 
     /// Array equality check.
@@ -1712,9 +1712,9 @@ extension MLXArray {
     public func cumsum(
         axis: Int, reverse: Bool = false, inclusive: Bool = true, stream: StreamOrDevice = .default
     ) -> MLXArray {
-        var result = mlx_array_new()
-        mlx_cumsum(&result, ctx, axis.int32, reverse, inclusive, stream.ctx)
-        return MLXArray(result)
+        let result = mlx_fast_alloc_array()!
+        mlx_fast_cumsum_axis(result, ctx.ctx, axis.int32, reverse, inclusive, stream.ctx.ctx)
+        return MLXArray(mlx_array(ctx: result))
     }
 
     /// Return the cumulative sum of the elements over the flattened array.
@@ -1739,9 +1739,9 @@ extension MLXArray {
         reverse: Bool = false, inclusive: Bool = true, stream: StreamOrDevice = .default
     ) -> MLXArray {
         let flat = self.reshaped([-1], stream: stream)
-        var result = mlx_array_new()
-        mlx_cumsum(&result, flat.ctx, 0, reverse, inclusive, stream.ctx)
-        return MLXArray(result)
+        let result = mlx_fast_alloc_array()!
+        mlx_fast_cumsum_axis(result, flat.ctx.ctx, 0, reverse, inclusive, stream.ctx.ctx)
+        return MLXArray(mlx_array(ctx: result))
     }
 
     /// Extract a diagonal or construct a diagonal matrix.
@@ -1797,9 +1797,9 @@ extension MLXArray {
     /// - <doc:arithmetic>
     /// - ``exp(_:stream:)``
     public func exp(stream: StreamOrDevice = .default) -> MLXArray {
-        var result = mlx_array_new()
-        mlx_exp(&result, ctx, stream.ctx)
-        return MLXArray(result)
+        let result = mlx_fast_alloc_array()!
+        mlx_fast_exp(result, ctx.ctx, stream.ctx.ctx)
+        return MLXArray(mlx_array(ctx: result))
     }
 
     /// Add a size one dimension at the given axis.
@@ -1814,9 +1814,12 @@ extension MLXArray {
     public func expandedDimensions(axes: some Collection<Int>, stream: StreamOrDevice = .default)
         -> MLXArray
     {
-        var result = mlx_array_new()
-        mlx_expand_dims_axes(&result, self.ctx, axes.asInt32, axes.count, stream.ctx)
-        return MLXArray(result)
+        let result = mlx_fast_alloc_array()!
+        let axesArr = Array(axes).map { Int32($0) }
+        axesArr.withUnsafeBufferPointer { buf in
+            mlx_fast_expand_dims(result, self.ctx.ctx, buf.baseAddress!, buf.count, stream.ctx.ctx)
+        }
+        return MLXArray(mlx_array(ctx: result))
     }
 
     /// Add a size one dimension at the given axis.
@@ -1831,9 +1834,9 @@ extension MLXArray {
     public func expandedDimensions(axis: Int, stream: StreamOrDevice = .default)
         -> MLXArray
     {
-        var result = mlx_array_new()
-        mlx_expand_dims(&result, self.ctx, axis.int32, stream.ctx)
-        return MLXArray(result)
+        let result = mlx_fast_alloc_array()!
+        mlx_fast_expand_dims_axis(result, self.ctx.ctx, axis.int32, stream.ctx.ctx)
+        return MLXArray(mlx_array(ctx: result))
     }
 
     /// Flatten an array.
@@ -1866,9 +1869,9 @@ extension MLXArray {
     public func flattened(start: Int = 0, end: Int = -1, stream: StreamOrDevice = .default)
         -> MLXArray
     {
-        var result = mlx_array_new()
-        mlx_flatten(&result, ctx, start.int32, end.int32, stream.ctx)
-        return MLXArray(result)
+        let result = mlx_fast_alloc_array()!
+        mlx_fast_flatten(result, ctx.ctx, start.int32, end.int32, stream.ctx.ctx)
+        return MLXArray(mlx_array(ctx: result))
     }
 
     /// Element-wise floor.
@@ -1928,9 +1931,9 @@ extension MLXArray {
     /// - <doc:arithmetic>
     /// - ``log(_:stream:)``
     public func log(stream: StreamOrDevice = .default) -> MLXArray {
-        var result = mlx_array_new()
-        mlx_log(&result, ctx, stream.ctx)
-        return MLXArray(result)
+        let result = mlx_fast_alloc_array()!
+        mlx_fast_log(result, ctx.ctx, stream.ctx.ctx)
+        return MLXArray(mlx_array(ctx: result))
     }
 
     /// Element-wise base-2 logarithm.
@@ -2123,9 +2126,12 @@ extension MLXArray {
     )
         -> MLXArray
     {
-        var result = mlx_array_new()
-        mlx_max_axes(&result, ctx, axes.asInt32, axes.count, keepDims, stream.ctx)
-        return MLXArray(result)
+        let result = mlx_fast_alloc_array()!
+        let axesArr = Array(axes).map { Int32($0) }
+        axesArr.withUnsafeBufferPointer { buf in
+            mlx_fast_max_axis(result, ctx.ctx, buf.baseAddress!, buf.count, keepDims, stream.ctx.ctx)
+        }
+        return MLXArray(mlx_array(ctx: result))
     }
 
     /// A `max` reduction over the given axis.
@@ -2150,9 +2156,10 @@ extension MLXArray {
     public func max(axis: Int, keepDims: Bool = false, stream: StreamOrDevice = .default)
         -> MLXArray
     {
-        var result = mlx_array_new()
-        mlx_max_axis(&result, ctx, axis.int32, keepDims, stream.ctx)
-        return MLXArray(result)
+        let result = mlx_fast_alloc_array()!
+        var ax = axis.int32
+        mlx_fast_max_axis(result, ctx.ctx, &ax, 1, keepDims, stream.ctx.ctx)
+        return MLXArray(mlx_array(ctx: result))
     }
 
     /// A `max` reduction over the entire array.
@@ -2174,9 +2181,9 @@ extension MLXArray {
     /// - ``max(axis:keepDims:stream:)``
     /// - ``max(_:axes:keepDims:stream:)``
     public func max(keepDims: Bool = false, stream: StreamOrDevice = .default) -> MLXArray {
-        var result = mlx_array_new()
-        mlx_max(&result, ctx, keepDims, stream.ctx)
-        return MLXArray(result)
+        let result = mlx_fast_alloc_array()!
+        mlx_fast_max_all(result, ctx.ctx, keepDims, stream.ctx.ctx)
+        return MLXArray(mlx_array(ctx: result))
     }
 
     /// A `mean` reduction over the given axes.
@@ -2203,9 +2210,12 @@ extension MLXArray {
     )
         -> MLXArray
     {
-        var result = mlx_array_new()
-        mlx_mean_axes(&result, ctx, axes.asInt32, axes.count, keepDims, stream.ctx)
-        return MLXArray(result)
+        let result = mlx_fast_alloc_array()!
+        let axesArr = Array(axes).map { Int32($0) }
+        axesArr.withUnsafeBufferPointer { buf in
+            mlx_fast_mean_axis(result, ctx.ctx, buf.baseAddress!, buf.count, keepDims, stream.ctx.ctx)
+        }
+        return MLXArray(mlx_array(ctx: result))
     }
 
     /// A `mean` reduction over the given axis.
@@ -2230,9 +2240,10 @@ extension MLXArray {
     public func mean(axis: Int, keepDims: Bool = false, stream: StreamOrDevice = .default)
         -> MLXArray
     {
-        var result = mlx_array_new()
-        mlx_mean_axis(&result, ctx, axis.int32, keepDims, stream.ctx)
-        return MLXArray(result)
+        let result = mlx_fast_alloc_array()!
+        var ax = axis.int32
+        mlx_fast_mean_axis(result, ctx.ctx, &ax, 1, keepDims, stream.ctx.ctx)
+        return MLXArray(mlx_array(ctx: result))
     }
 
     /// A `mean` reduction over the entire array.
@@ -2254,9 +2265,9 @@ extension MLXArray {
     /// - ``mean(axis:keepDims:stream:)``
     /// - ``mean(_:axes:keepDims:stream:)``
     public func mean(keepDims: Bool = false, stream: StreamOrDevice = .default) -> MLXArray {
-        var result = mlx_array_new()
-        mlx_mean(&result, ctx, keepDims, stream.ctx)
-        return MLXArray(result)
+        let result = mlx_fast_alloc_array()!
+        mlx_fast_mean_all(result, ctx.ctx, keepDims, stream.ctx.ctx)
+        return MLXArray(mlx_array(ctx: result))
     }
 
     /// A `min` reduction over the given axes.
@@ -2283,9 +2294,12 @@ extension MLXArray {
     )
         -> MLXArray
     {
-        var result = mlx_array_new()
-        mlx_min_axes(&result, ctx, axes.asInt32, axes.count, keepDims, stream.ctx)
-        return MLXArray(result)
+        let result = mlx_fast_alloc_array()!
+        let axesArr = Array(axes).map { Int32($0) }
+        axesArr.withUnsafeBufferPointer { buf in
+            mlx_fast_min_axis(result, ctx.ctx, buf.baseAddress!, buf.count, keepDims, stream.ctx.ctx)
+        }
+        return MLXArray(mlx_array(ctx: result))
     }
 
     /// A `min` reduction over the given axis.
@@ -2310,9 +2324,10 @@ extension MLXArray {
     public func min(axis: Int, keepDims: Bool = false, stream: StreamOrDevice = .default)
         -> MLXArray
     {
-        var result = mlx_array_new()
-        mlx_min_axis(&result, ctx, axis.int32, keepDims, stream.ctx)
-        return MLXArray(result)
+        let result = mlx_fast_alloc_array()!
+        var ax = axis.int32
+        mlx_fast_min_axis(result, ctx.ctx, &ax, 1, keepDims, stream.ctx.ctx)
+        return MLXArray(mlx_array(ctx: result))
     }
 
     /// A `min` reduction over the entire array.
@@ -2334,9 +2349,9 @@ extension MLXArray {
     /// - ``min(axis:keepDims:stream:)``
     /// - ``min(_:axes:keepDims:stream:)``
     public func min(keepDims: Bool = false, stream: StreamOrDevice = .default) -> MLXArray {
-        var result = mlx_array_new()
-        mlx_min(&result, ctx, keepDims, stream.ctx)
-        return MLXArray(result)
+        let result = mlx_fast_alloc_array()!
+        mlx_fast_min_all(result, ctx.ctx, keepDims, stream.ctx.ctx)
+        return MLXArray(mlx_array(ctx: result))
     }
 
     /// Move an axis to a new position.
@@ -2636,10 +2651,13 @@ extension MLXArray {
     /// - ``split(indices:axis:stream:)``
     /// - ``split(_:parts:axis:stream:)``
     public func split(parts: Int, axis: Int = 0, stream: StreamOrDevice = .default) -> [MLXArray] {
-        var vec = mlx_vector_array_new()
-        mlx_split(&vec, ctx, parts.int32, axis.int32, stream.ctx)
-        defer { mlx_vector_array_free(vec) }
-        return mlx_vector_array_values(vec)
+        let results = (0 ..< parts).map { _ in mlx_fast_alloc_array()! }
+        var ptrs = results.map { $0 as UnsafeMutableRawPointer? }
+        var numResults: Int = 0
+        ptrs.withUnsafeMutableBufferPointer { buf in
+            mlx_fast_split_equal(buf.baseAddress!, &numResults, ctx.ctx, parts.int32, axis.int32, stream.ctx.ctx)
+        }
+        return results.prefix(numResults).map { MLXArray(mlx_array(ctx: $0)) }
     }
 
     /// Split an array into 2 pieces along an axis and returns a tuple -- convenient for destructuring.
@@ -2662,10 +2680,13 @@ extension MLXArray {
     /// - ``split(indices:axis:stream:)``
     /// - ``split(_:parts:axis:stream:)``
     public func split(axis: Int = 0, stream: StreamOrDevice = .default) -> (MLXArray, MLXArray) {
-        var vec = mlx_vector_array_new()
-        mlx_split(&vec, ctx, 2, axis.int32, stream.ctx)
-        defer { mlx_vector_array_free(vec) }
-        let pieces = mlx_vector_array_values(vec)
+        let results = (0 ..< 2).map { _ in mlx_fast_alloc_array()! }
+        var ptrs = results.map { $0 as UnsafeMutableRawPointer? }
+        var numResults: Int = 0
+        ptrs.withUnsafeMutableBufferPointer { buf in
+            mlx_fast_split_equal(buf.baseAddress!, &numResults, ctx.ctx, 2, axis.int32, stream.ctx.ctx)
+        }
+        let pieces = results.map { MLXArray(mlx_array(ctx: $0)) }
         return (pieces[0], pieces[1])
     }
 
@@ -2685,10 +2706,17 @@ extension MLXArray {
     )
         -> [MLXArray]
     {
-        var vec = mlx_vector_array_new()
-        mlx_split_sections(&vec, ctx, indices.asInt32, indices.count, axis.int32, stream.ctx)
-        defer { mlx_vector_array_free(vec) }
-        return mlx_vector_array_values(vec)
+        let maxResults = indices.count + 1
+        let results = (0 ..< maxResults).map { _ in mlx_fast_alloc_array()! }
+        var ptrs = results.map { $0 as UnsafeMutableRawPointer? }
+        var numResults: Int = 0
+        let indicesArr = Array(indices).map { Int32($0) }
+        ptrs.withUnsafeMutableBufferPointer { buf in
+            indicesArr.withUnsafeBufferPointer { idxBuf in
+                mlx_fast_split_indices(buf.baseAddress!, &numResults, ctx.ctx, idxBuf.baseAddress!, idxBuf.count, axis.int32, stream.ctx.ctx)
+            }
+        }
+        return results.prefix(numResults).map { MLXArray(mlx_array(ctx: $0)) }
     }
 
     /// Element-wise square root
@@ -2732,9 +2760,12 @@ extension MLXArray {
     /// - ``squeezed(_:axes:stream:)``
     public func squeezed(axes: some Collection<Int>, stream: StreamOrDevice = .default) -> MLXArray
     {
-        var result = mlx_array_new()
-        mlx_squeeze_axes(&result, ctx, axes.asInt32, axes.count, stream.ctx)
-        return MLXArray(result)
+        let result = mlx_fast_alloc_array()!
+        let axesArr = Array(axes).map { Int32($0) }
+        axesArr.withUnsafeBufferPointer { buf in
+            mlx_fast_squeeze_axes(result, ctx.ctx, buf.baseAddress!, buf.count, stream.ctx.ctx)
+        }
+        return MLXArray(mlx_array(ctx: result))
     }
 
     /// Remove length one axes from an array.
@@ -2749,9 +2780,9 @@ extension MLXArray {
     /// - ``squeezed(stream:)``
     /// - ``squeezed(_:axes:stream:)``
     public func squeezed(axis: Int, stream: StreamOrDevice = .default) -> MLXArray {
-        var result = mlx_array_new()
-        mlx_squeeze_axis(&result, ctx, axis.int32, stream.ctx)
-        return MLXArray(result)
+        let result = mlx_fast_alloc_array()!
+        mlx_fast_squeeze_axis(result, ctx.ctx, axis.int32, stream.ctx.ctx)
+        return MLXArray(mlx_array(ctx: result))
     }
 
     /// Remove all length one axes from an array.
@@ -2765,9 +2796,9 @@ extension MLXArray {
     /// - ``squeezed(axis:stream:)``
     /// - ``squeezed(_:axes:stream:)``
     public func squeezed(stream: StreamOrDevice = .default) -> MLXArray {
-        var result = mlx_array_new()
-        mlx_squeeze(&result, ctx, stream.ctx)
-        return MLXArray(result)
+        let result = mlx_fast_alloc_array()!
+        mlx_fast_squeeze_all(result, ctx.ctx, stream.ctx.ctx)
+        return MLXArray(mlx_array(ctx: result))
     }
 
     /// Sum reduce the array over the given axes.
@@ -2787,9 +2818,12 @@ extension MLXArray {
     )
         -> MLXArray
     {
-        var result = mlx_array_new()
-        mlx_sum_axes(&result, ctx, axes.asInt32, axes.count, keepDims, stream.ctx)
-        return MLXArray(result)
+        let result = mlx_fast_alloc_array()!
+        let axesArr = Array(axes).map { Int32($0) }
+        axesArr.withUnsafeBufferPointer { buf in
+            mlx_fast_sum_axis(result, ctx.ctx, buf.baseAddress!, buf.count, keepDims, stream.ctx.ctx)
+        }
+        return MLXArray(mlx_array(ctx: result))
     }
 
     /// Sum reduce the array over the given axis.
@@ -2807,9 +2841,10 @@ extension MLXArray {
     public func sum(axis: Int, keepDims: Bool = false, stream: StreamOrDevice = .default)
         -> MLXArray
     {
-        var result = mlx_array_new()
-        mlx_sum_axis(&result, ctx, axis.int32, keepDims, stream.ctx)
-        return MLXArray(result)
+        let result = mlx_fast_alloc_array()!
+        var ax = axis.int32
+        mlx_fast_sum_axis(result, ctx.ctx, &ax, 1, keepDims, stream.ctx.ctx)
+        return MLXArray(mlx_array(ctx: result))
     }
 
     /// Sum reduce the array over all axes.
@@ -2824,9 +2859,9 @@ extension MLXArray {
     /// - ``sum(axis:keepDims:stream:)``
     /// - ``sum(_:axes:keepDims:stream:)``
     public func sum(keepDims: Bool = false, stream: StreamOrDevice = .default) -> MLXArray {
-        var result = mlx_array_new()
-        mlx_sum(&result, ctx, keepDims, stream.ctx)
-        return MLXArray(result)
+        let result = mlx_fast_alloc_array()!
+        mlx_fast_sum_all(result, ctx.ctx, keepDims, stream.ctx.ctx)
+        return MLXArray(mlx_array(ctx: result))
     }
 
     /// Swap two axes of an array.
@@ -2892,9 +2927,9 @@ extension MLXArray {
     /// - ``take(_:_:axis:stream:)``
     public func take(_ indices: MLXArray, axis: Int, stream: StreamOrDevice = .default) -> MLXArray
     {
-        var result = mlx_array_new()
-        mlx_take_axis(&result, ctx, indices.ctx, axis.int32, stream.ctx)
-        return MLXArray(result)
+        let result = mlx_fast_alloc_array()!
+        mlx_fast_take_axis(result, ctx.ctx, indices.ctx.ctx, axis.int32, stream.ctx.ctx)
+        return MLXArray(mlx_array(ctx: result))
     }
 
     /// Take elements from flattened 1-D array.
@@ -2908,9 +2943,9 @@ extension MLXArray {
     /// - ``take(_:_:axis:stream:)``
     public func take(_ indices: MLXArray, stream: StreamOrDevice = .default) -> MLXArray {
         let input = self.reshaped([-1], stream: stream)
-        var result = mlx_array_new()
-        mlx_take(&result, input.ctx, indices.ctx, stream.ctx)
-        return MLXArray(result)
+        let result = mlx_fast_alloc_array()!
+        mlx_fast_take(result, input.ctx.ctx, indices.ctx.ctx, stream.ctx.ctx)
+        return MLXArray(mlx_array(ctx: result))
     }
 
     /// Transpose the dimensions of the array.
