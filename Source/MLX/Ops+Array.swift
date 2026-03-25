@@ -946,9 +946,10 @@ public func logSumExp(_ array: MLXArray, keepDims: Bool = false, stream: StreamO
 /// - ``blockMaskedMM(_:_:blockSize:maskOut:maskLHS:maskRHS:stream:)``
 /// - ``MLXArray/matmul(_:stream:)``
 public func matmul(_ a: MLXArray, _ b: MLXArray, stream: StreamOrDevice = .default) -> MLXArray {
-    var result = mlx_array_new()
-    mlx_matmul(&result, a.ctx, b.ctx, stream.ctx)
-    return MLXArray(result)
+    // Fast path: direct C++ wrapper bypasses mlx-c bridge overhead
+    let result = mlx_fast_alloc_array()!
+    mlx_fast_matmul(result, a.ctx.ctx, b.ctx.ctx, stream.ctx.ctx)
+    return MLXArray(mlx_array(ctx: result))
 }
 
 /// A `max` reduction over the given axes.

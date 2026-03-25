@@ -2420,6 +2420,22 @@ public func quantizedMM(
     mode: QuantizationMode = .affine,
     stream: StreamOrDevice = .default
 ) -> MLXArray {
+    // Fast path: use direct C++ wrapper for the common affine case.
+    // Bypasses mlx-c bridge overhead (null checks, try/catch, heap alloc).
+    if mode == .affine {
+        let result = mlx_fast_alloc_array()!
+        mlx_fast_quantized_matmul(
+            result,
+            x.ctx.ctx, w.ctx.ctx, scales.ctx.ctx,
+            biases?.ctx.ctx,
+            transpose,
+            Int32(groupSize ?? 64),
+            Int32(bits ?? 4),
+            stream.ctx.ctx)
+        return MLXArray(mlx_array(ctx: result))
+    }
+
+    // Standard path for non-affine modes
     var result = mlx_array_new()
 
     let gs = mlx_optional_int(value: Int32(groupSize ?? 0), has_value: groupSize != nil)
@@ -2724,6 +2740,13 @@ public func softMax(_ array: MLXArray, precise: Bool = false, stream: StreamOrDe
 public func softmax(_ array: MLXArray, precise: Bool = false, stream: StreamOrDevice = .default)
     -> MLXArray
 {
+    // Fast path: direct C++ wrapper bypasses mlx-c bridge
+    if !precise {
+        let result = mlx_fast_alloc_array()!
+        var axis: Int32 = -1
+        mlx_fast_softmax(result, array.ctx.ctx, &axis, 1, false, stream.ctx.ctx)
+        return MLXArray(mlx_array(ctx: result))
+    }
     var result = mlx_array_new()
     mlx_softmax(&result, array.ctx, precise, stream.ctx)
     return MLXArray(result)
