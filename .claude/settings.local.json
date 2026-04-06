@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git branch:*)",
+      "Bash(git rebase:*)",
+      "Bash(git submodule:*)",
+      "Bash(brew list:*)",
+      "Bash(xcrun --find clang-format)",
+      "Bash(xcrun clang-format:*)",
+      "Bash(grep -n \"mlx_array_new\\(\\)\" /Users/eric/Development/personal/ai/mlx-swift/Source/Cmlx/mlx-c/mlx/c/*.cpp)",
+      "Bash(git stash:*)",
+      "Bash(cp /Users/eric/Development/personal/ai/mlx-swift/Tests/MLXTests/Int32BufferBenchmarkTests.swift /tmp/Int32BufferBenchmarkTests.swift)",
+      "Bash(cp /tmp/Int32BufferBenchmarkTests.swift /Users/eric/Development/personal/ai/mlx-swift/Tests/MLXTests/Int32BufferBenchmarkTests.swift)",
+      "Bash(rm -f /Users/eric/Development/personal/ai/mlx-swift/.git/index.lock)",
+      "Bash(git worktree:*)"
+    ]
+  }
+}
