@@ -104,6 +104,15 @@ public final class Stream: @unchecked Sendable, Equatable {
         return try await $defaultStream.withValue(Stream(device), operation: body)
     }
 
+    /// Use an existing stream as the default for the duration of `body`.
+    ///
+    /// Unlike ``withNewDefaultStream(device:_:)-5bwc3`` which creates a new stream,
+    /// this reuses an existing one — matching Python's
+    /// `with mx.stream(generation_stream):` pattern for persistent streams.
+    public static func withStream<R>(_ stream: Stream, _ body: () throws -> R) rethrows -> R {
+        return try $defaultStream.withValue(stream, operation: body)
+    }
+
     init(_ ctx: mlx_stream) {
         self.ctx = ctx
     }
