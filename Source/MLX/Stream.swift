@@ -52,7 +52,7 @@ public struct StreamOrDevice: Sendable, CustomStringConvertible, Equatable {
     public static let gpu = device(.gpu)
 
     public static func stream(_ stream: Stream) -> StreamOrDevice {
-        StreamOrDevice(Device.defaultStream())
+        StreamOrDevice(stream)
     }
 
     /// Internal context -- used with Cmlx calls.
@@ -142,6 +142,16 @@ public final class Stream: @unchecked Sendable, Equatable {
     public func synchronize() {
         _ = evalLock.withLock {
             mlx_synchronize(ctx)
+        }
+    }
+
+    /// Set this stream as the global default for all MLX operations.
+    ///
+    /// Matches Python's `mx.set_default_stream()`. Call BEFORE loading model
+    /// weights so weights and forward pass share the same stream.
+    public func setAsDefault() {
+        _ = evalLock.withLock {
+            mlx_set_default_stream(ctx)
         }
     }
 
