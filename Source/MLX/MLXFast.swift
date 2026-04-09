@@ -237,6 +237,39 @@ public enum MLXFast {
         return MLXArray(result)
     }
 
+    /// Fused RMSNorm + RoPE operation.
+    ///
+    /// Combines RMS normalization and rotary position embedding in a single dispatch.
+    /// Input is in `[B, L, nHeads, headDim]` layout (pre-transpose). The operation applies
+    /// RMSNorm weight scaling then RoPE rotation for each (batch, position, head) row.
+    ///
+    /// - Parameters:
+    ///   - x: input array `[B, L, nHeads, headDim]`
+    ///   - weight: RMSNorm weight `[headDim]`
+    ///   - invFreqs: inverse frequencies `[headDim/2]`. Use 0 for unrotated dimensions.
+    ///   - eps: normalization epsilon
+    ///   - offset: RoPE position offset (cache.offset)
+    ///   - nHeads: number of attention heads
+    ///   - seqLen: sequence length (L dimension)
+    ///   - stream: stream or device to evaluate on
+    public static func rmsNormRoPE(
+        _ x: MLXArray,
+        weight: MLXArray,
+        invFreqs: MLXArray,
+        eps: Float,
+        offset: Int,
+        nHeads: Int,
+        seqLen: Int,
+        stream: StreamOrDevice = .default
+    ) -> MLXArray {
+        var result = mlx_array_new()
+        mlx_fast_rms_norm_rope(
+            &result, x.ctx, weight.ctx, invFreqs.ctx,
+            eps, Int32(offset), Int32(nHeads), Int32(seqLen),
+            stream.ctx)
+        return MLXArray(result)
+    }
+
     /// Layer normalization.
     ///
     /// The normalization is with respect to the last axis of the input `x`.

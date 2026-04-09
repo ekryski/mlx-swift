@@ -166,6 +166,16 @@ int mlx_fast_rms_norm(
     const mlx_array weight /* may be null */,
     float eps,
     const mlx_stream s);
+int mlx_fast_rms_norm_rope(
+    mlx_array* res,
+    const mlx_array x,
+    const mlx_array weight,
+    const mlx_array inv_freqs,
+    float eps,
+    int offset,
+    int n_heads,
+    int seq_len,
+    const mlx_stream s);
 int mlx_fast_rope(
     mlx_array* res,
     const mlx_array x,
