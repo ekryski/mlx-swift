@@ -270,6 +270,38 @@ public enum MLXFast {
         return MLXArray(result)
     }
 
+    /// Fused RMSNorm + Quantized GEMV (matrix-vector multiply) for decode inference.
+    ///
+    /// Combines RMS normalization with 4-bit quantized matrix-vector multiply in a
+    /// single kernel dispatch. Eliminates the global memory round-trip between
+    /// separate RMSNorm and quantized matmul operations.
+    ///
+    /// - Parameters:
+    ///   - x: input vector `[..., K]`
+    ///   - normWeight: RMSNorm weight `[K]`
+    ///   - w: quantized weights `[N, K_packed]` (4-bit packed)
+    ///   - scales: per-group scales `[N, K/groupSize]`
+    ///   - biases: per-group biases `[N, K/groupSize]`
+    ///   - eps: normalization epsilon
+    ///   - groupSize: quantization group size (typically 64)
+    ///   - stream: stream or device to evaluate on
+    public static func rmsNormQuantizedGEMV(
+        _ x: MLXArray,
+        normWeight: MLXArray,
+        w: MLXArray,
+        scales: MLXArray,
+        biases: MLXArray,
+        eps: Float,
+        groupSize: Int = 64,
+        stream: StreamOrDevice = .default
+    ) -> MLXArray {
+        var result = mlx_array_new()
+        mlx_fast_rms_norm_qgemv(
+            &result, x.ctx, normWeight.ctx, w.ctx, scales.ctx, biases.ctx,
+            eps, Int32(groupSize), stream.ctx)
+        return MLXArray(result)
+    }
+
     /// Layer normalization.
     ///
     /// The normalization is with respect to the last axis of the input `x`.

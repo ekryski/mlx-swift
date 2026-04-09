@@ -176,6 +176,16 @@ int mlx_fast_rms_norm_rope(
     int n_heads,
     int seq_len,
     const mlx_stream s);
+int mlx_fast_rms_norm_qgemv(
+    mlx_array* res,
+    const mlx_array x,
+    const mlx_array norm_weight,
+    const mlx_array w,
+    const mlx_array scales,
+    const mlx_array biases,
+    float eps,
+    int group_size,
+    const mlx_stream s);
 int mlx_fast_rope(
     mlx_array* res,
     const mlx_array x,
