@@ -45,6 +45,7 @@ instantiate_attn_mask_helper_bd256(bfloat16, bfloat16_t);
 instantiate_attn_mask_helper_bd512(bfloat16, bfloat16_t);
 
 instantiate_attn_mask_helper(float32, float);
-instantiate_attn_mask_helper_bd256(float32, float);
-instantiate_attn_mask_helper_bd512(float32, float);
+// BD=256 and BD=512 are NOT instantiated for float32 — threadgroup memory
+// exceeds 32KB limit (41KB for BD=256, 49KB for BD=512). Only float16/bfloat16
+// (2 bytes/element) fit. The C++ dispatch gates on dtype to avoid this path.
 // clang-format on
