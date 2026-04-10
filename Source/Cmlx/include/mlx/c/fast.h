@@ -166,26 +166,6 @@ int mlx_fast_rms_norm(
     const mlx_array weight /* may be null */,
     float eps,
     const mlx_stream s);
-int mlx_fast_rms_norm_rope(
-    mlx_array* res,
-    const mlx_array x,
-    const mlx_array weight,
-    const mlx_array inv_freqs,
-    float eps,
-    int offset,
-    int n_heads,
-    int seq_len,
-    const mlx_stream s);
-int mlx_fast_rms_norm_qgemv(
-    mlx_array* res,
-    const mlx_array x,
-    const mlx_array norm_weight,
-    const mlx_array w,
-    const mlx_array scales,
-    const mlx_array biases,
-    float eps,
-    int group_size,
-    const mlx_stream s);
 int mlx_fast_rope(
     mlx_array* res,
     const mlx_array x,
@@ -215,6 +195,27 @@ int mlx_fast_scaled_dot_product_attention(
     const char* mask_mode,
     const mlx_array mask_arr /* may be null */,
     const mlx_array sinks /* may be null */,
+    const mlx_stream s);
+
+int mlx_fast_rms_norm_rope(
+    mlx_array* res,
+    const mlx_array x,
+    const mlx_array weight,
+    const mlx_array inv_freqs,
+    float eps,
+    int offset,
+    int n_heads,
+    int seq_len,
+    const mlx_stream s);
+int mlx_fast_rms_norm_qgemv(
+    mlx_array* res,
+    const mlx_array x,
+    const mlx_array norm_weight,
+    const mlx_array w,
+    const mlx_array scales,
+    const mlx_array biases,
+    float eps,
+    int group_size,
     const mlx_stream s);
 
 /**@}*/
