@@ -456,3 +456,159 @@ public func layerNorm(
 ) -> MLXArray {
     return MLXFast.layerNorm(x, weight: weight, bias: bias, eps: eps, stream: stream)
 }
+
+// MARK: - TurboQuant Framework Kernels
+
+extension MLXFast {
+
+    /// Compute Q*K attention scores from packed codebook-quantized keys.
+    public static func turboScore(
+        _ qRot: MLXArray, packed: MLXArray, norms: MLXArray, codebook: MLXArray,
+        tokenCount: Int, repeatCount: Int, bits: Int, dim: Int,
+        stream: StreamOrDevice = .default
+    ) -> MLXArray {
+        var result = mlx_array_new()
+        mlx_fast_turbo_score(&result, qRot.ctx, packed.ctx, norms.ctx, codebook.ctx,
+            Int32(tokenCount), Int32(repeatCount), Int32(bits), Int32(dim), stream.ctx)
+        return MLXArray(result)
+    }
+
+    /// Fused norm+rotate+quantize+pack (dense rotation). Returns (packed, norms).
+    public static func turboEncode(
+        _ input: MLXArray, rotation: MLXArray, boundaries: MLXArray, codebook: MLXArray,
+        bits: Int, dim: Int, stream: StreamOrDevice = .default
+    ) -> [MLXArray] {
+        var result = mlx_vector_array_new()
+        mlx_fast_turbo_encode(&result, input.ctx, rotation.ctx, boundaries.ctx, codebook.ctx,
+            Int32(bits), Int32(dim), stream.ctx)
+        return mlx_vector_array_values(result)
+    }
+
+    /// Fused norm+WHT+quantize+pack (Walsh-Hadamard). Returns (packed, norms).
+    public static func turboEncodeWHT(
+        _ input: MLXArray, whtSigns: MLXArray, boundaries: MLXArray,
+        bits: Int, dim: Int, stream: StreamOrDevice = .default
+    ) -> [MLXArray] {
+        var result = mlx_vector_array_new()
+        mlx_fast_turbo_encode_wht(&result, input.ctx, whtSigns.ctx, boundaries.ctx,
+            Int32(bits), Int32(dim), stream.ctx)
+        return mlx_vector_array_values(result)
+    }
+
+    /// TurboFlash pass 1 (non-causal). Returns (o_partials, m_partials, l_partials).
+    public static func turboFlashPass1(
+        _ qRot: MLXArray,
+        keyPacked: MLXArray, keyNorms: MLXArray, keyCodebook: MLXArray,
+        valPacked: MLXArray, valNorms: MLXArray, valCodebook: MLXArray,
+        tokenCount: Int, repeatCount: Int, numBlocks: Int, blockSize: Int,
+        keyBits: Int, valueBits: Int, dim: Int,
+        stream: StreamOrDevice = .default
+    ) -> [MLXArray] {
+        var result = mlx_vector_array_new()
+        mlx_fast_turbo_flash_pass1(&result, qRot.ctx,
+            keyPacked.ctx, keyNorms.ctx, keyCodebook.ctx,
+            valPacked.ctx, valNorms.ctx, valCodebook.ctx,
+            Int32(tokenCount), Int32(repeatCount), Int32(numBlocks), Int32(blockSize),
+            Int32(keyBits), Int32(valueBits), Int32(dim), stream.ctx)
+        return mlx_vector_array_values(result)
+    }
+
+    /// TurboFlash pass 1 (causal). Returns (o_partials, m_partials, l_partials).
+    public static func turboFlashPass1Causal(
+        _ qRot: MLXArray,
+        keyPacked: MLXArray, keyNorms: MLXArray, keyCodebook: MLXArray,
+        valPacked: MLXArray, valNorms: MLXArray, valCodebook: MLXArray,
+        tokenCount: Int, repeatCount: Int, numBlocks: Int, blockSize: Int,
+        L: Int, qOffset: Int,
+        keyBits: Int, valueBits: Int, dim: Int,
+        stream: StreamOrDevice = .default
+    ) -> [MLXArray] {
+        var result = mlx_vector_array_new()
+        mlx_fast_turbo_flash_pass1_causal(&result, qRot.ctx,
+            keyPacked.ctx, keyNorms.ctx, keyCodebook.ctx,
+            valPacked.ctx, valNorms.ctx, valCodebook.ctx,
+            Int32(tokenCount), Int32(repeatCount), Int32(numBlocks), Int32(blockSize),
+            Int32(L), Int32(qOffset),
+            Int32(keyBits), Int32(valueBits), Int32(dim), stream.ctx)
+        return mlx_vector_array_values(result)
+    }
+
+    /// TurboFlash pass 2: cross-block online softmax reduction.
+    public static func turboFlashPass2(
+        oPartials: MLXArray, mPartials: MLXArray, lPartials: MLXArray,
+        numBlocks: Int, dim: Int, stream: StreamOrDevice = .default
+    ) -> MLXArray {
+        var result = mlx_array_new()
+        mlx_fast_turbo_flash_pass2(&result, oPartials.ctx, mPartials.ctx, lPartials.ctx,
+            Int32(numBlocks), Int32(dim), stream.ctx)
+        return MLXArray(result)
+    }
+
+    /// TurboFlash pass 2 with fused output rotation.
+    public static func turboFlashPass2Fused(
+        oPartials: MLXArray, mPartials: MLXArray, lPartials: MLXArray,
+        valRotation: MLXArray,
+        numBlocks: Int, dim: Int, stream: StreamOrDevice = .default
+    ) -> MLXArray {
+        var result = mlx_array_new()
+        mlx_fast_turbo_flash_pass2_fused(&result, oPartials.ctx, mPartials.ctx, lPartials.ctx,
+            valRotation.ctx, Int32(numBlocks), Int32(dim), stream.ctx)
+        return MLXArray(result)
+    }
+
+    /// Weighted sum of codebook-quantized values (V aggregation).
+    public static func turboValue(
+        _ weights: MLXArray, packed: MLXArray, norms: MLXArray, codebook: MLXArray,
+        tokenCount: Int, repeatCount: Int, sparseThreshold: Float,
+        bits: Int, dim: Int, stream: StreamOrDevice = .default
+    ) -> MLXArray {
+        var result = mlx_array_new()
+        mlx_fast_turbo_value(&result, weights.ctx, packed.ctx, norms.ctx, codebook.ctx,
+            Int32(tokenCount), Int32(repeatCount), sparseThreshold,
+            Int32(bits), Int32(dim), stream.ctx)
+        return MLXArray(result)
+    }
+}
+
+// MARK: - GatedDelta Framework Kernel
+
+extension MLXFast {
+
+    /// GatedDeltaNet recurrent step (standard or fused).
+    /// Returns (y, state_out).
+    public static func gatedDeltaStep(
+        q: MLXArray, k: MLXArray, v: MLXArray,
+        g: MLXArray, beta: MLXArray, state: MLXArray,
+        mask: MLXArray? = nil,
+        T: Int, fused: Bool,
+        Dk: Int, Dv: Int, Hk: Int, Hv: Int,
+        stream: StreamOrDevice = .default
+    ) -> [MLXArray] {
+        var result = mlx_vector_array_new()
+        mlx_fast_gated_delta_step(&result,
+            q.ctx, k.ctx, v.ctx, g.ctx, beta.ctx, state.ctx,
+            mask?.ctx ?? mlx_array_new(),
+            Int32(T), fused, Int32(Dk), Int32(Dv), Int32(Hk), Int32(Hv), stream.ctx)
+        return mlx_vector_array_values(result)
+    }
+}
+
+// MARK: - SSM Framework Kernel
+
+extension MLXFast {
+
+    /// Mamba2 SSM recurrent step (single timestep).
+    /// Returns (out, state_out).
+    public static func ssmStep(
+        X: MLXArray, ALog: MLXArray, B: MLXArray, C: MLXArray,
+        D: MLXArray, dt: MLXArray, state: MLXArray,
+        Dh: Int, Ds: Int, H: Int, G: Int,
+        stream: StreamOrDevice = .default
+    ) -> [MLXArray] {
+        var result = mlx_vector_array_new()
+        mlx_fast_ssm_step(&result,
+            X.ctx, ALog.ctx, B.ctx, C.ctx, D.ctx, dt.ctx, state.ctx,
+            Int32(Dh), Int32(Ds), Int32(H), Int32(G), stream.ctx)
+        return mlx_vector_array_values(result)
+    }
+}
