@@ -533,6 +533,44 @@ extension MLXFast {
         return mlx_vector_array_values(result)
     }
 
+    /// TurboFlash pass 1 NR0 (non-causal, multi-row). Returns (o_partials, m_partials, l_partials).
+    public static func turboFlashPass1NR0(
+        _ qRot: MLXArray,
+        keyPacked: MLXArray, keyNorms: MLXArray, keyCodebook: MLXArray,
+        valPacked: MLXArray, valNorms: MLXArray, valCodebook: MLXArray,
+        tokenCount: Int, repeatCount: Int, numBlocks: Int, blockSize: Int,
+        keyBits: Int, valueBits: Int, dim: Int, nr0: Int,
+        stream: StreamOrDevice = .default
+    ) -> [MLXArray] {
+        var result = mlx_vector_array_new()
+        mlx_fast_turbo_flash_pass1_nr0(&result, qRot.ctx,
+            keyPacked.ctx, keyNorms.ctx, keyCodebook.ctx,
+            valPacked.ctx, valNorms.ctx, valCodebook.ctx,
+            Int32(tokenCount), Int32(repeatCount), Int32(numBlocks), Int32(blockSize),
+            Int32(keyBits), Int32(valueBits), Int32(dim), Int32(nr0), stream.ctx)
+        return mlx_vector_array_values(result)
+    }
+
+    /// TurboFlash pass 1 NR0 (causal, multi-row). Returns (o_partials, m_partials, l_partials).
+    public static func turboFlashPass1NR0Causal(
+        _ qRot: MLXArray,
+        keyPacked: MLXArray, keyNorms: MLXArray, keyCodebook: MLXArray,
+        valPacked: MLXArray, valNorms: MLXArray, valCodebook: MLXArray,
+        tokenCount: Int, repeatCount: Int, numBlocks: Int, blockSize: Int,
+        L: Int, qOffset: Int,
+        keyBits: Int, valueBits: Int, dim: Int, nr0: Int,
+        stream: StreamOrDevice = .default
+    ) -> [MLXArray] {
+        var result = mlx_vector_array_new()
+        mlx_fast_turbo_flash_pass1_nr0_causal(&result, qRot.ctx,
+            keyPacked.ctx, keyNorms.ctx, keyCodebook.ctx,
+            valPacked.ctx, valNorms.ctx, valCodebook.ctx,
+            Int32(tokenCount), Int32(repeatCount), Int32(numBlocks), Int32(blockSize),
+            Int32(L), Int32(qOffset),
+            Int32(keyBits), Int32(valueBits), Int32(dim), Int32(nr0), stream.ctx)
+        return mlx_vector_array_values(result)
+    }
+
     /// TurboFlash pass 2: cross-block online softmax reduction.
     public static func turboFlashPass2(
         oPartials: MLXArray, mPartials: MLXArray, lPartials: MLXArray,
