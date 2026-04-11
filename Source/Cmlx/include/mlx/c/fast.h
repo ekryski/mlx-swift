@@ -235,6 +235,7 @@ int mlx_fast_turbo_flash_pass2_fused(mlx_array* res, const mlx_array o_partials,
 int mlx_fast_turbo_value(mlx_array* res, const mlx_array weights, const mlx_array packed, const mlx_array norms, const mlx_array codebook, int token_count, int repeat_count, float sparse_threshold, int bits, int dim, const mlx_stream s);
 // GatedDelta
 int mlx_fast_gated_delta_step(mlx_vector_array* res, const mlx_array q, const mlx_array k, const mlx_array v, const mlx_array g, const mlx_array beta, const mlx_array state, const mlx_array mask, int T, bool fused, int Dk, int Dv, int Hk, int Hv, const mlx_stream s);
+int mlx_fast_gated_delta_step_fused(mlx_vector_array* res, const mlx_array q_raw, const mlx_array k_raw, const mlx_array v, const mlx_array a, const mlx_array b_input, const mlx_array a_log, const mlx_array dt_bias, const mlx_array state, const mlx_array mask, int T, int Dk, int Dv, int Hk, int Hv, const mlx_stream s);
 // SSM
 int mlx_fast_ssm_step(mlx_vector_array* res, const mlx_array X, const mlx_array A_log, const mlx_array B, const mlx_array C, const mlx_array D, const mlx_array dt, const mlx_array state, int Dh, int Ds, int H, int G, const mlx_stream s);
 

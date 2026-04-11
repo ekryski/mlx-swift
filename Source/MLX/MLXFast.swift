@@ -591,6 +591,25 @@ extension MLXFast {
             Int32(T), fused, Int32(Dk), Int32(Dv), Int32(Hk), Int32(Hv), stream.ctx)
         return mlx_vector_array_values(result)
     }
+
+    /// GatedDeltaNet fused recurrence step (norm+gate+beta fused inside kernel).
+    /// Returns (y, state_out).
+    public static func gatedDeltaStepFused(
+        qRaw: MLXArray, kRaw: MLXArray, v: MLXArray,
+        a: MLXArray, bInput: MLXArray,
+        aLog: MLXArray, dtBias: MLXArray,
+        state: MLXArray, mask: MLXArray? = nil,
+        T: Int, Dk: Int, Dv: Int, Hk: Int, Hv: Int,
+        stream: StreamOrDevice = .default
+    ) -> [MLXArray] {
+        var result = mlx_vector_array_new()
+        mlx_fast_gated_delta_step_fused(&result,
+            qRaw.ctx, kRaw.ctx, v.ctx, a.ctx, bInput.ctx,
+            aLog.ctx, dtBias.ctx, state.ctx,
+            mask?.ctx ?? mlx_array_new(),
+            Int32(T), Int32(Dk), Int32(Dv), Int32(Hk), Int32(Hv), stream.ctx)
+        return mlx_vector_array_values(result)
+    }
 }
 
 // MARK: - SSM Framework Kernel
