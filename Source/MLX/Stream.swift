@@ -34,8 +34,22 @@ public struct StreamOrDevice: Sendable, CustomStringConvertible, Equatable {
     ///
     /// This will be ``Device/gpu`` unless ``Device/setDefault(device:)``
     /// sets it otherwise.
+    // PERF: Cache the default to avoid @TaskLocal lookup on every op (~880/prefill).
+    // The TaskLocal path added ~15ms overhead per forward pass.
+    private static var _cachedDefault: StreamOrDevice?
+
     public static var `default`: StreamOrDevice {
-        StreamOrDevice(Stream.defaultStream ?? Device.defaultStream())
+        if let cached = _cachedDefault {
+            return cached
+        }
+        let result = StreamOrDevice(Stream.defaultStream ?? Device.defaultStream())
+        _cachedDefault = result
+        return result
+    }
+
+    /// Invalidate the cached default (called when setAsDefault changes the stream)
+    static func invalidateDefaultCache() {
+        _cachedDefault = nil
     }
 
     public static func device(_ device: Device) -> StreamOrDevice {
@@ -93,6 +107,8 @@ public final class Stream: @unchecked Sendable, Equatable {
         rethrows -> R
     {
         let device = device ?? Device.defaultDevice()
+        StreamOrDevice.invalidateDefaultCache()
+        defer { StreamOrDevice.invalidateDefaultCache() }
         return try $defaultStream.withValue(Stream(device), operation: body)
     }
 
@@ -101,6 +117,8 @@ public final class Stream: @unchecked Sendable, Equatable {
         device: Device? = nil, _ body: () async throws -> R
     ) async rethrows -> R {
         let device = device ?? Device.defaultDevice()
+        StreamOrDevice.invalidateDefaultCache()
+        defer { StreamOrDevice.invalidateDefaultCache() }
         return try await $defaultStream.withValue(Stream(device), operation: body)
     }
 
@@ -162,6 +180,7 @@ public final class Stream: @unchecked Sendable, Equatable {
         _ = evalLock.withLock {
             mlx_set_default_stream(ctx)
         }
+        StreamOrDevice.invalidateDefaultCache()
     }
 
     static public func defaultStream(_ device: Device) -> Stream {

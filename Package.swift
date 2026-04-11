@@ -93,6 +93,11 @@ import PackageDescription
         .define("_METAL_"),
         .define("SWIFTPM_BUNDLE", to: "\"mlx-swift_Cmlx\""),
         .define("METAL_PATH", to: "\"default.metallib\""),
+
+        // Match Python MLX's -O3 (SPM defaults to -O2 for C++ in release).
+        // Critical for prefill: CPU graph traversal + Metal buffer setup is 90%+
+        // of eval time, and -O3 vs -O2 gives 2-4x improvement.
+        .unsafeFlags(["-O3"]),
     ]
 
     let linkerSettings: [LinkerSetting] = [
@@ -209,6 +214,10 @@ let cmlx = Target.target(
         .headerSearchPath("json/single_include/nlohmann"),
         .headerSearchPath("fmt/include"),
         .define("MLX_VERSION", to: "\"0.31.1\""),
+        // NAX (Neural Accelerator) Steel kernels in ek/perf-improvements
+        // contain JIT-compile errors against current macOS Metal toolchain
+        // (zero-length arrays in nax.h). Disable until upstream lands a fix.
+        .define("MLX_METAL_NO_NAX"),
     ],
     linkerSettings: linkerSettings
 )
