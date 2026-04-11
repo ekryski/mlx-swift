@@ -237,6 +237,30 @@ public enum MLXFast {
         return MLXArray(result)
     }
 
+    /// Fused RMSNorm + Residual Add operation.
+    ///
+    /// Computes `residual + rmsNorm(x, weight, eps)` in a single Metal dispatch.
+    /// Saves one kernel launch per call vs separate rmsNorm + add.
+    ///
+    /// - Parameters:
+    ///   - x: input array to normalize
+    ///   - residual: skip connection array (same shape as x)
+    ///   - weight: RMSNorm weight (1D, same size as last axis of x)
+    ///   - eps: normalization epsilon
+    ///   - stream: stream or device to evaluate on
+    public static func rmsNormResidual(
+        _ x: MLXArray,
+        residual: MLXArray,
+        weight: MLXArray,
+        eps: Float,
+        stream: StreamOrDevice = .default
+    ) -> MLXArray {
+        var result = mlx_array_new()
+        mlx_fast_rms_norm_residual(
+            &result, x.ctx, residual.ctx, weight.ctx, eps, stream.ctx)
+        return MLXArray(result)
+    }
+
     /// Fused RMSNorm + RoPE operation.
     ///
     /// Combines RMS normalization and rotary position embedding in a single dispatch.
