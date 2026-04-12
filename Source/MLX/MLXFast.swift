@@ -326,6 +326,31 @@ public enum MLXFast {
         return MLXArray(result)
     }
 
+    /// Batched QKV quantized GEMV: 3 projections in a single Metal dispatch.
+    ///
+    /// Loads input x to shared memory once, then computes Q, K, V GEMVs sequentially.
+    /// Returns concatenated [N_q + N_k + N_v] output. Caller splits.
+    /// Saves 2 Metal dispatches per layer vs 3 separate `quantizedMM` calls.
+    /// Decode-only (T=1).
+    public static func batchedQKVQuantizedGEMV(
+        _ x: MLXArray,
+        wQ: MLXArray, scalesQ: MLXArray, biasesQ: MLXArray,
+        wK: MLXArray, scalesK: MLXArray, biasesK: MLXArray,
+        wV: MLXArray, scalesV: MLXArray, biasesV: MLXArray,
+        groupSize: Int = 64,
+        stream: StreamOrDevice = .default
+    ) -> MLXArray {
+        var result = mlx_array_new()
+        mlx_fast_batched_qkv_qgemv(
+            &result,
+            x.ctx,
+            wQ.ctx, scalesQ.ctx, biasesQ.ctx,
+            wK.ctx, scalesK.ctx, biasesK.ctx,
+            wV.ctx, scalesV.ctx, biasesV.ctx,
+            Int32(groupSize), stream.ctx)
+        return MLXArray(result)
+    }
+
     /// Layer normalization.
     ///
     /// The normalization is with respect to the last axis of the input `x`.

@@ -193,6 +193,14 @@ int mlx_fast_rms_norm_qgemv(
     float eps,
     int group_size,
     const mlx_stream s);
+int mlx_fast_batched_qkv_qgemv(
+    mlx_array* res,
+    const mlx_array x,
+    const mlx_array w_q, const mlx_array scales_q, const mlx_array biases_q,
+    const mlx_array w_k, const mlx_array scales_k, const mlx_array biases_k,
+    const mlx_array w_v, const mlx_array scales_v, const mlx_array biases_v,
+    int group_size,
+    const mlx_stream s);
 int mlx_fast_rope(
     mlx_array* res,
     const mlx_array x,
