@@ -565,6 +565,7 @@ extension MLXFast {
         bits: Int, dim: Int, stream: StreamOrDevice = .default
     ) -> [MLXArray] {
         var result = mlx_vector_array_new()
+        defer { mlx_vector_array_free(result) }
         mlx_fast_turbo_encode(&result, input.ctx, rotation.ctx, boundaries.ctx, codebook.ctx,
             Int32(bits), Int32(dim), stream.ctx)
         return mlx_vector_array_values(result)
@@ -576,6 +577,7 @@ extension MLXFast {
         bits: Int, dim: Int, stream: StreamOrDevice = .default
     ) -> [MLXArray] {
         var result = mlx_vector_array_new()
+        defer { mlx_vector_array_free(result) }
         mlx_fast_turbo_encode_wht(&result, input.ctx, whtSigns.ctx, boundaries.ctx,
             Int32(bits), Int32(dim), stream.ctx)
         return mlx_vector_array_values(result)
@@ -591,6 +593,7 @@ extension MLXFast {
         stream: StreamOrDevice = .default
     ) -> [MLXArray] {
         var result = mlx_vector_array_new()
+        defer { mlx_vector_array_free(result) }
         mlx_fast_turbo_flash_pass1(&result, qRot.ctx,
             keyPacked.ctx, keyNorms.ctx, keyCodebook.ctx,
             valPacked.ctx, valNorms.ctx, valCodebook.ctx,
@@ -610,6 +613,7 @@ extension MLXFast {
         stream: StreamOrDevice = .default
     ) -> [MLXArray] {
         var result = mlx_vector_array_new()
+        defer { mlx_vector_array_free(result) }
         mlx_fast_turbo_flash_pass1_causal(&result, qRot.ctx,
             keyPacked.ctx, keyNorms.ctx, keyCodebook.ctx,
             valPacked.ctx, valNorms.ctx, valCodebook.ctx,
@@ -629,6 +633,7 @@ extension MLXFast {
         stream: StreamOrDevice = .default
     ) -> [MLXArray] {
         var result = mlx_vector_array_new()
+        defer { mlx_vector_array_free(result) }
         mlx_fast_turbo_flash_pass1_nr0(&result, qRot.ctx,
             keyPacked.ctx, keyNorms.ctx, keyCodebook.ctx,
             valPacked.ctx, valNorms.ctx, valCodebook.ctx,
@@ -648,6 +653,7 @@ extension MLXFast {
         stream: StreamOrDevice = .default
     ) -> [MLXArray] {
         var result = mlx_vector_array_new()
+        defer { mlx_vector_array_free(result) }
         mlx_fast_turbo_flash_pass1_nr0_causal(&result, qRot.ctx,
             keyPacked.ctx, keyNorms.ctx, keyCodebook.ctx,
             valPacked.ctx, valNorms.ctx, valCodebook.ctx,
@@ -709,6 +715,7 @@ extension MLXFast {
         stream: StreamOrDevice = .default
     ) -> [MLXArray] {
         var result = mlx_vector_array_new()
+        defer { mlx_vector_array_free(result) }
         mlx_fast_gated_delta_step(&result,
             q.ctx, k.ctx, v.ctx, g.ctx, beta.ctx, state.ctx,
             mask?.ctx ?? mlx_array_new(),
@@ -727,6 +734,7 @@ extension MLXFast {
         stream: StreamOrDevice = .default
     ) -> [MLXArray] {
         var result = mlx_vector_array_new()
+        defer { mlx_vector_array_free(result) }
         mlx_fast_gated_delta_step_fused(&result,
             qRaw.ctx, kRaw.ctx, v.ctx, a.ctx, bInput.ctx,
             aLog.ctx, dtBias.ctx, state.ctx,
@@ -749,6 +757,7 @@ extension MLXFast {
         stream: StreamOrDevice = .default
     ) -> [MLXArray] {
         var result = mlx_vector_array_new()
+        defer { mlx_vector_array_free(result) }
         mlx_fast_ssm_step(&result,
             X.ctx, ALog.ctx, B.ctx, C.ctx, D.ctx, dt.ctx, state.ctx,
             Int32(Dh), Int32(Ds), Int32(H), Int32(G), stream.ctx)
