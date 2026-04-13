@@ -248,8 +248,12 @@ template <typename T, int Dk, int Dv, int Hk, int Hv>
 instantiate_gdn(half, float16, 192, 128, 4, 4)
 instantiate_gdn(bfloat16_t, bfloat16, 192, 128, 4, 4)
 
-// Qwen3.5 larger variants may have different dims
+// Qwen3.5 larger variants
 instantiate_gdn(half, float16, 128, 128, 8, 8)
 instantiate_gdn(bfloat16_t, bfloat16, 128, 128, 8, 8)
 instantiate_gdn(half, float16, 64, 64, 8, 8)
 instantiate_gdn(bfloat16_t, bfloat16, 64, 64, 8, 8)
+
+// Qwen3.5-35B: Dk=128, Dv=128, numHeads=16, numKVHeads=2
+instantiate_gdn(half, float16, 128, 128, 16, 32)
+instantiate_gdn(bfloat16_t, bfloat16, 128, 128, 16, 32)

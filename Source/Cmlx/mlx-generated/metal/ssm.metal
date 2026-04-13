@@ -190,3 +190,15 @@ instantiate_ssm(bfloat16_t, bfloat16, 128, 128, 48, 1)
 instantiate_ssm(bfloat16_t, bfloat16, 128, 128, 48, 2)
 instantiate_ssm(bfloat16_t, bfloat16, 128, 128, 48, 4)
 instantiate_ssm(bfloat16_t, bfloat16, 128, 128, 48, 8)
+
+// Nemotron Cascade 2: dh=64, ds=128, h=64 (not covered by existing h=16,32,48)
+instantiate_ssm(half, float16, 64, 128, 64, 1)
+instantiate_ssm(half, float16, 64, 128, 64, 2)
+instantiate_ssm(half, float16, 64, 128, 64, 4)
+instantiate_ssm(half, float16, 64, 128, 64, 8)
+instantiate_ssm(bfloat16_t, bfloat16, 64, 128, 64, 1)
+instantiate_ssm(bfloat16_t, bfloat16, 64, 128, 64, 2)
+instantiate_ssm(bfloat16_t, bfloat16, 64, 128, 64, 4)
+instantiate_ssm(bfloat16_t, bfloat16, 64, 128, 64, 8)
+
+

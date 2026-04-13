@@ -201,6 +201,20 @@ int mlx_fast_batched_qkv_qgemv(
     const mlx_array w_v, const mlx_array scales_v, const mlx_array biases_v,
     int group_size,
     const mlx_stream s);
+int mlx_fast_warp_moe_gate_up(
+    mlx_array* res,
+    const mlx_array x,
+    const mlx_array w, const mlx_array scales, const mlx_array biases,
+    const mlx_array indices,
+    int group_size, int hidden_dims, int activation_type,
+    const mlx_stream s);
+int mlx_fast_warp_moe_down(
+    mlx_array* res,
+    const mlx_array activated,
+    const mlx_array w, const mlx_array scales, const mlx_array biases,
+    const mlx_array indices, const mlx_array scores,
+    int group_size, int hidden_dims, int out_dims,
+    const mlx_stream s);
 int mlx_fast_rope(
     mlx_array* res,
     const mlx_array x,

@@ -351,6 +351,67 @@ public enum MLXFast {
         return MLXArray(result)
     }
 
+    /// Warp MoE Gate+Up: fused gate+up projection with activation for decode.
+    ///
+    /// Each SIMD group computes one activated neuron for one expert.
+    /// Replaces gatherQuantizedMM(gate_up) + split + activation.
+    ///
+    /// - Parameters:
+    ///   - x: input vector [inputDims] (flattened)
+    ///   - w: gate_up weights [numExperts, 2*hiddenDims, inputDims_packed]
+    ///   - indices: expert indices [topK]
+    ///   - activationType: 0=silu, 1=gelu_approx, 2=swiglu
+    /// - Returns: activated [topK, hiddenDims]
+    public static func warpMoeGateUp(
+        _ x: MLXArray,
+        w: MLXArray, scales: MLXArray, biases: MLXArray,
+        indices: MLXArray,
+        groupSize: Int = 64,
+        hiddenDims: Int,
+        activationType: Int = 0,
+        stream: StreamOrDevice = .default
+    ) -> MLXArray {
+        var result = mlx_array_new()
+        mlx_fast_warp_moe_gate_up(
+            &result, x.ctx,
+            w.ctx, scales.ctx, biases.ctx,
+            indices.ctx,
+            Int32(groupSize), Int32(hiddenDims), Int32(activationType),
+            stream.ctx)
+        return MLXArray(result)
+    }
+
+    /// Warp MoE Down: fused down projection with routing weight folding.
+    ///
+    /// Each SIMD group computes one final output neuron, looping over all
+    /// topK experts and folding routing scores into the accumulator.
+    /// Replaces gatherQuantizedMM(down) + weighted sum.
+    ///
+    /// - Parameters:
+    ///   - activated: per-expert intermediates [topK, hiddenDims]
+    ///   - w: down projection weights [numExperts, outputDims, hiddenDims_packed]
+    ///   - indices: expert indices [topK]
+    ///   - scores: routing weights [topK]
+    /// - Returns: final MoE output [outputDims]
+    public static func warpMoeDown(
+        _ activated: MLXArray,
+        w: MLXArray, scales: MLXArray, biases: MLXArray,
+        indices: MLXArray, scores: MLXArray,
+        groupSize: Int = 64,
+        hiddenDims: Int,
+        outDims: Int,
+        stream: StreamOrDevice = .default
+    ) -> MLXArray {
+        var result = mlx_array_new()
+        mlx_fast_warp_moe_down(
+            &result, activated.ctx,
+            w.ctx, scales.ctx, biases.ctx,
+            indices.ctx, scores.ctx,
+            Int32(groupSize), Int32(hiddenDims), Int32(outDims),
+            stream.ctx)
+        return MLXArray(result)
+    }
+
     /// Layer normalization.
     ///
     /// The normalization is with respect to the last axis of the input `x`.
