@@ -131,6 +131,9 @@ let cmlx = Target.target(
         "fmt/src/os.cc",
         "fmt/src/fmt.cc",
 
+        // CMake build artifacts from mlx submodule
+        "mlx/build",
+
         // these are selected conditionally
         "mlx/mlx/backend/no_cpu/compiled.cpp",
 
@@ -215,9 +218,9 @@ let cmlx = Target.target(
         .headerSearchPath("fmt/include"),
         .define("MLX_VERSION", to: "\"0.31.1\""),
         // NAX (Neural Accelerator) Steel kernels in ek/perf-improvements
-        // contain JIT-compile errors against current macOS Metal toolchain
-        // (zero-length arrays in nax.h). Disable until upstream lands a fix.
-        .define("MLX_METAL_NO_NAX"),
+        // NAX enabled — BD=256 attention has zero-length array bug, guarded
+        // in scaled_dot_product_attention.cpp (BD<=128 only for NAX path).
+        // .define("MLX_METAL_NO_NAX"),
     ],
     linkerSettings: linkerSettings
 )
