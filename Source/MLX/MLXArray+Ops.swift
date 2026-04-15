@@ -2584,7 +2584,11 @@ extension MLXArray {
     /// - ``reshaped(_:stream:)``
     public func reshaped(_ newShape: Int..., stream: StreamOrDevice = .default) -> MLXArray {
         var result = mlx_array_new()
-        mlx_reshape(&result, ctx, newShape.asInt32, newShape.count, stream.ctx)
+        // PERF: stack-allocate Int32 conversion instead of heap-allocating [Int32]
+        withUnsafeTemporaryAllocation(of: Int32.self, capacity: newShape.count) { buf in
+            for i in 0..<newShape.count { buf[i] = Int32(newShape[i]) }
+            mlx_reshape(&result, ctx, buf.baseAddress!, newShape.count, stream.ctx)
+        }
         return MLXArray(result)
     }
 
@@ -2978,7 +2982,10 @@ extension MLXArray {
     /// - ``transposed(_:axes:stream:)``
     public func transposed(_ axes: Int..., stream: StreamOrDevice = .default) -> MLXArray {
         var result = mlx_array_new()
-        mlx_transpose_axes(&result, ctx, axes.asInt32, axes.count, stream.ctx)
+        withUnsafeTemporaryAllocation(of: Int32.self, capacity: axes.count) { buf in
+            for i in 0..<axes.count { buf[i] = Int32(axes[i]) }
+            mlx_transpose_axes(&result, ctx, buf.baseAddress!, axes.count, stream.ctx)
+        }
         return MLXArray(result)
     }
 
