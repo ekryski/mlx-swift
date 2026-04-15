@@ -210,6 +210,10 @@ let cmlx = Target.target(
         .headerSearchPath("json/single_include/nlohmann"),
         .headerSearchPath("fmt/include"),
         .define("MLX_VERSION", to: "\"0.31.1\""),
+        // NAX (Neural Accelerator) Steel kernels — 2.3x prefill speedup.
+        // NAX enabled: BD=256 attention has zero-length array bug, guarded
+        // in scaled_dot_product_attention.cpp (BD<=128 only for NAX path).
+        // .define("MLX_METAL_NO_NAX"),
     ],
     linkerSettings: linkerSettings
 )
