@@ -17,6 +17,48 @@ MLX_API array rms_norm(
     float eps,
     StreamOrDevice s = {});
 
+MLX_API array rms_norm_rope(
+    const array& x,
+    const array& weight,
+    const array& inv_freqs,
+    float eps,
+    int offset,
+    int n_heads,
+    int seq_len,
+    StreamOrDevice s = {});
+
+MLX_API array rms_norm_qgemv(
+    const array& x,
+    const array& norm_weight,
+    const array& w,
+    const array& scales,
+    const array& biases,
+    float eps,
+    int group_size,
+    StreamOrDevice s = {});
+
+MLX_API array batched_qkv_qgemv(
+    const array& x,
+    const array& w_q, const array& scales_q, const array& biases_q,
+    const array& w_k, const array& scales_k, const array& biases_k,
+    const array& w_v, const array& scales_v, const array& biases_v,
+    int group_size,
+    StreamOrDevice s = {});
+
+MLX_API array warp_moe_gate_up(
+    const array& x,
+    const array& w, const array& scales, const array& biases,
+    const array& indices,
+    int group_size, int hidden_dims, int activation_type,
+    StreamOrDevice s = {});
+
+MLX_API array warp_moe_down(
+    const array& activated,
+    const array& w, const array& scales, const array& biases,
+    const array& indices, const array& scores,
+    int group_size, int hidden_dims, int out_dims,
+    StreamOrDevice s = {});
+
 MLX_API array layer_norm(
     const array& x,
     const std::optional<array>& weight,

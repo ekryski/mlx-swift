@@ -19,6 +19,18 @@ public final class MLXArray {
         self.ctx = ctx
     }
 
+    /// Initialize from a raw `mlx::core::array*` pointer (zero-copy).
+    ///
+    /// The pointer must be a heap-allocated `mlx::core::array*` (e.g. from `new mlx::core::array(...)`).
+    /// This initializer takes ownership — the array will be freed when the MLXArray is deallocated.
+    /// The underlying GPU data buffer is shared via `shared_ptr` (zero-copy).
+    ///
+    /// This is used for interop with C/C++ code that creates MLX arrays outside of Swift.
+    public static func fromCppArray(_ ptr: UnsafeMutableRawPointer) -> MLXArray {
+        var handle = mlx_array(ctx: ptr)
+        return MLXArray(handle)
+    }
+
     /// return the equivalent of a `.none` MLXArray (for the C API).
     ///
     /// Not called `.none` to avoid ambiguity with `Optional`.  This can be used
