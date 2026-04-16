@@ -40,9 +40,8 @@ public final class MLXArray {
     /// ```swift
     /// mlx_func((freqs ?? .mlxNone).ctx)
     /// ```
-    public static var mlxNone: MLXArray {
-        .init(mlx_array_new())
-    }
+    // PERF: static let avoids creating a new MLXArray on every access (~150 calls per forward pass)
+    public static let mlxNone: MLXArray = .init(mlx_array_new())
 
     deinit {
         mlx_array_free(ctx)
