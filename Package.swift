@@ -233,6 +233,8 @@ let package = Package(
         .library(name: "MLXFFT", targets: ["MLXFFT"]),
         .library(name: "MLXLinalg", targets: ["MLXLinalg"]),
         .library(name: "MLXFast", targets: ["MLXFast"]),
+        // C/C++ internals — exposed for NativePrefillBridge in mlx-swift-lm
+        .library(name: "Cmlx", targets: ["Cmlx"]),
     ],
     dependencies: [
         // for Complex type
