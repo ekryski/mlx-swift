@@ -193,6 +193,32 @@ public enum GPU {
         mlx_metal_stop_capture()
     }
 
+    /// Reset the Metal dispatch counter on the default command encoder.
+    ///
+    /// Use together with ``totalDispatches()`` to count the number of Metal
+    /// kernel launches MLX issued between two program points. Useful for
+    /// auditing per-token dispatch counts (e.g. for Metal Indirect Command
+    /// Buffer feasibility studies) or verifying that dispatch-reducing
+    /// optimizations (kernel fusion, graph caching) actually reduced the
+    /// count they were intended to reduce.
+    ///
+    /// ```swift
+    /// GPU.resetDispatchCounter()
+    /// _ = try await model.generateOneToken(...)
+    /// let count = GPU.totalDispatches()
+    /// ```
+    public static func resetDispatchCounter() {
+        mlx_metal_reset_dispatch_counter()
+    }
+
+    /// Cumulative count of Metal kernel dispatches (i.e. dispatchThreads /
+    /// dispatchThreadgroups calls) since the last ``resetDispatchCounter()``.
+    public static func totalDispatches() -> UInt64 {
+        var count: UInt64 = 0
+        mlx_metal_total_dispatches(&count)
+        return count
+    }
+
     /// Reset the peak memory to zero.
     ///
     /// See ``Memory/Snapshot/peakMemory``.

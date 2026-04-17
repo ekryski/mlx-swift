@@ -31,6 +31,8 @@ extern "C" {
 int mlx_metal_is_available(bool* res);
 int mlx_metal_start_capture(const char* path);
 int mlx_metal_stop_capture(void);
+int mlx_metal_reset_dispatch_counter(void);
+int mlx_metal_total_dispatches(uint64_t* res);
 
 /**@}*/
 
