@@ -50,6 +50,7 @@ int mlx_metal_icb_begin_recording(
 int mlx_metal_icb_end_recording(
     mlx_stream stream,
     mlx_metal_icb_recorder* out);
+int mlx_metal_icb_abort_recording(mlx_stream stream);
 int mlx_metal_icb_replay(mlx_stream stream, mlx_metal_icb_recorder rec);
 int mlx_metal_icb_recorder_num_segments(
     mlx_metal_icb_recorder rec,

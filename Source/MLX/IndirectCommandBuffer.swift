@@ -65,23 +65,33 @@ public final class IndirectCommandBuffer: @unchecked Sendable {
             stream.ctx,
             maxCommandsPerSegment,
             bytesArenaCapacity)
+
         var threw: Error? = nil
         do {
             try block()
         } catch {
             threw = error
         }
+
+        // If the user block threw, the C++ side may have already aborted
+        // recording (e.g. on arena exhaustion) — but it also may not have.
+        // Force-abort unconditionally so we never leak recording state.
+        if threw != nil {
+            _ = mlx_metal_icb_abort_recording(stream.ctx)
+            try { throw threw! }()
+        }
+
         var recorder = mlx_metal_icb_recorder(ctx: nil)
         let rc = mlx_metal_icb_end_recording(stream.ctx, &recorder)
         if rc != 0 {
-            // end_recording failed (e.g. partial command pending). Free
-            // any partial recorder and rethrow.
             _ = mlx_metal_icb_recorder_free(recorder)
-            if let threw { try { throw threw }() }
+            // end_recording's own errors (e.g. pending command) also clear
+            // recording state, but call abort anyway as a belt-and-braces
+            // guard.
+            _ = mlx_metal_icb_abort_recording(stream.ctx)
             preconditionFailure(
-                "mlx_metal_icb_end_recording failed while recording had no user error")
+                "mlx_metal_icb_end_recording failed (see mlx error log)")
         }
-        if let threw { try { throw threw }() }
         return IndirectCommandBuffer(ctx: recorder)
     }
 
