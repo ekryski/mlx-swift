@@ -38,6 +38,25 @@ int mlx_metal_stop_kernel_log(void);
 int mlx_metal_kernel_log_size(size_t* res);
 int mlx_metal_kernel_log_at(size_t i, const char** label_out);
 
+typedef struct mlx_metal_icb_recorder_ {
+  void* ctx;
+} mlx_metal_icb_recorder;
+
+int mlx_metal_icb_is_supported(bool* res);
+int mlx_metal_icb_begin_recording(
+    mlx_stream stream,
+    size_t max_commands_per_segment,
+    size_t bytes_arena_cap);
+int mlx_metal_icb_end_recording(
+    mlx_stream stream,
+    mlx_metal_icb_recorder* out);
+int mlx_metal_icb_replay(mlx_stream stream, mlx_metal_icb_recorder rec);
+int mlx_metal_icb_recorder_num_segments(
+    mlx_metal_icb_recorder rec,
+    size_t* res);
+int mlx_metal_icb_recorder_size(mlx_metal_icb_recorder rec, size_t* res);
+int mlx_metal_icb_recorder_free(mlx_metal_icb_recorder rec);
+
 /**@}*/
 
 #ifdef __cplusplus
