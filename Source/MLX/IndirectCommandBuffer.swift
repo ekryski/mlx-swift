@@ -3,6 +3,78 @@
 import Cmlx
 import Foundation
 
+/// A caller-defined name used to tag an `MLXArray` during ICB recording
+/// so that it can later be substituted by `IndirectCommandBuffer.replay(overrides:)`.
+///
+/// Names are opaque to MLX — they only need to be consistent between
+/// the `tag` call and the matching override lookup. A string-literal
+/// init is provided for ergonomic call sites:
+///
+/// ```swift
+/// tagger.tag(hiddenState, as: "input")
+/// icb.replay(overrides: ["input": nextHiddenState])
+/// ```
+///
+/// The underlying identity passed to the C layer is a 32-bit hash of
+/// the string, computed once at init time. Within a process, two
+/// `BindingName` values constructed from the same string compare equal
+/// and hash to the same `rawValue`. Construct via `rawValue:` if you
+/// need a specific numeric ID (e.g. when bridging to an external
+/// identifier registry).
+public struct BindingName: Hashable, Sendable, ExpressibleByStringLiteral {
+    /// The 32-bit ID passed to the C API for this name.
+    public let rawValue: UInt32
+
+    public init(_ name: String) {
+        self.rawValue = Self.fnv1a32(name)
+    }
+
+    public init(stringLiteral value: String) {
+        self.init(value)
+    }
+
+    public init(rawValue: UInt32) {
+        self.rawValue = rawValue
+    }
+
+    /// FNV-1a 32-bit. Deterministic across runs and architectures;
+    /// collisions are possible but overwhelmingly unlikely for the small
+    /// symbol sets typical of model-integration code.
+    private static func fnv1a32(_ s: String) -> UInt32 {
+        var hash: UInt32 = 2_166_136_261
+        for byte in s.utf8 {
+            hash ^= UInt32(byte)
+            hash &*= 16_777_619
+        }
+        return hash
+    }
+}
+
+/// A handle passed to the `recordWithBindings` closure so the caller
+/// can associate `BindingName`s with `MLXArray`s as their backing
+/// MTLBuffers flow through the recorded dispatches.
+///
+/// See `IndirectCommandBuffer.recordWithBindings` for the typical
+/// record-and-replay pattern.
+public final class BindingTagger: @unchecked Sendable {
+    private let streamCtx: mlx_stream
+
+    fileprivate init(streamCtx: mlx_stream) {
+        self.streamCtx = streamCtx
+    }
+
+    /// Associate `name` with the `MLXArray`'s underlying MTLBuffer
+    /// during the active recording. Any already-recorded dispatch
+    /// that bound that buffer is tagged immediately; any subsequent
+    /// bind of the same buffer in this recording is also tagged.
+    ///
+    /// Call only from inside the `recordWithBindings` closure —
+    /// calling outside an active recording throws at the C++ layer.
+    public func tag(_ array: MLXArray, as name: BindingName) {
+        _ = mlx_metal_icb_tag_binding(streamCtx, name.rawValue, array.ctx)
+    }
+}
+
 /// Captures a stable sequence of MLX compute dispatches into an
 /// `MTLIndirectCommandBuffer` and replays it on subsequent calls with
 /// substantially lower CPU-side encoding cost.
@@ -101,6 +173,92 @@ public final class IndirectCommandBuffer: @unchecked Sendable {
     /// memory barrier between consecutive segments.
     public func replay(stream: StreamOrDevice = .default) {
         mlx_metal_icb_replay(stream.ctx, ctx)
+    }
+
+    /// Record dispatches with named MTLBuffer bindings that can be
+    /// substituted on subsequent replays.
+    ///
+    /// Within `block`, tag the `MLXArray`s whose storage will change
+    /// between replays (typical examples: the hidden-state input to a
+    /// decoder layer, the KV cache key/value arrays, the slot into
+    /// which the layer writes its output). On replay, pass the new
+    /// values via `replay(overrides:)` and the ICB's dispatches are
+    /// re-bound to the new buffers before execution.
+    ///
+    /// ```swift
+    /// let icb = try IndirectCommandBuffer.recordWithBindings(stream: s) { tagger in
+    ///     tagger.tag(hidden,          as: "input")
+    ///     tagger.tag(cache.keys,      as: "k_cache")
+    ///     tagger.tag(cache.values,    as: "v_cache")
+    ///     hidden = layer(hidden, mask: mask, cache: cache)
+    ///     tagger.tag(hidden,          as: "output")
+    /// }
+    /// // per subsequent step:
+    /// icb.replay(overrides: [
+    ///     "input":   nextHidden,
+    ///     "k_cache": cache.keys,
+    ///     "v_cache": cache.values,
+    ///     "output":  outputSlot,
+    /// ])
+    /// ```
+    ///
+    /// Semantically equivalent to `record` — this overload only adds
+    /// the tagger handle; all other parameters match.
+    public static func recordWithBindings(
+        maxCommandsPerSegment: Int = 2048,
+        bytesArenaCapacity: Int = 64 * 1024,
+        stream: StreamOrDevice = .default,
+        _ block: (BindingTagger) throws -> Void
+    ) rethrows -> IndirectCommandBuffer {
+        try record(
+            maxCommandsPerSegment: maxCommandsPerSegment,
+            bytesArenaCapacity: bytesArenaCapacity,
+            stream: stream
+        ) {
+            let tagger = BindingTagger(streamCtx: stream.ctx)
+            try block(tagger)
+        }
+    }
+
+    /// Replay the captured sequence, substituting the MTLBuffer
+    /// binding for each tagged name with the buffer underlying the
+    /// override `MLXArray` (offset included from the array's storage).
+    /// Names not present in `overrides` keep their recorded binding;
+    /// names never tagged during recording are silently skipped.
+    ///
+    /// Override writes mutate the ICB's indirect compute commands in
+    /// place. A subsequent plain `replay()` observes the last
+    /// overrides written, so callers that mix the two paths should
+    /// either always replay with overrides, or re-establish the
+    /// originals explicitly before a plain replay.
+    public func replay(
+        overrides: [BindingName: MLXArray],
+        stream: StreamOrDevice = .default
+    ) {
+        if overrides.isEmpty {
+            replay(stream: stream)
+            return
+        }
+        // Parallel arrays — names[i] matches arrays[i]. A single pass
+        // over the dictionary guarantees matching indices.
+        var names = [UInt32]()
+        var arrays = [mlx_array]()
+        names.reserveCapacity(overrides.count)
+        arrays.reserveCapacity(overrides.count)
+        for (name, array) in overrides {
+            names.append(name.rawValue)
+            arrays.append(array.ctx)
+        }
+        names.withUnsafeBufferPointer { namesPtr in
+            arrays.withUnsafeBufferPointer { arraysPtr in
+                _ = mlx_metal_icb_replay_with_overrides(
+                    stream.ctx,
+                    ctx,
+                    namesPtr.baseAddress,
+                    arraysPtr.baseAddress,
+                    overrides.count)
+            }
+        }
     }
 
     /// Number of ICB segments (barrier-separated blocks) in this recording.
