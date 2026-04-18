@@ -29,6 +29,7 @@ rms_norm.metal \
 rms_norm_ab.metal \
 rope.metal \
 rope_ab.metal \
+affine_qmv_ab.metal \
 scaled_dot_product_attention.metal \
 steel/attn/kernels/steel_attention.metal"
 
