@@ -373,3 +373,103 @@ public final class PersistentRopeFreqsAbHandle {
         return _registry.compactMap { $0.ref }.count
     }
 }
+
+/// Persistent argument buffer for the `gather_front_ab` kernel (5
+/// slots). Used by the ICB decode-loop orchestrator to keep the
+/// embedding-gather's indices-buffer pointer mutable across replays.
+/// Without it, the record-step's input token is frozen into the AB
+/// and every replay reuses the same embedding vector (the "WeWeWe"
+/// loop symptom).
+///
+/// Layout:
+///   0: BufferPtrOffset  src      (weight table; stable across steps)
+///   1: BufferPtrOffset  indices  (per-step input token buffer)
+///   2: BufferPtrOffset  out      (destination; stable across steps)
+///   3: Scalar64         stride
+///   4: Scalar32         size
+public final class PersistentGatherFrontAbHandle {
+    public enum Slot: Int32 {
+        case src = 0
+        case indices = 1
+        case out = 2
+        case stride = 3
+        case size = 4
+    }
+
+    internal var ctx: mlx_metal_persistent_ab
+
+    public init(stream: StreamOrDevice = .default) {
+        var handle = mlx_metal_persistent_ab(ctx: nil)
+        let rc = mlx_metal_persistent_ab_new_gather_front(&handle, stream.ctx)
+        precondition(
+            rc == 0 && handle.ctx != nil,
+            "mlx_metal_persistent_ab_new_gather_front failed (see mlx error log)"
+        )
+        self.ctx = handle
+        Self.register(self)
+    }
+
+    deinit {
+        Self.unregister(self)
+        _ = mlx_metal_persistent_ab_free(ctx)
+    }
+
+    public func setBufferPtr(slot: Slot, array: MLXArray) {
+        _ = mlx_metal_persistent_ab_set_buffer_ptr(ctx, slot.rawValue, array.ctx)
+    }
+
+    /// Push this handle onto the thread-local gather_front_ab handoff
+    /// queue. FIFO: the next matching gather consumes this handle;
+    /// further gathers consume additional handles. Push once per
+    /// gather the caller wants to override. For a QuantizedEmbedding
+    /// lookup that's three handles in a row (weight/scales/biases).
+    public func pushAsNextGatherFront() {
+        _ = mlx_metal_push_next_gather_front_persistent_ab(ctx)
+    }
+
+    /// Drain the thread-local gather_front_ab handoff queue. Safe
+    /// even when the queue is empty.
+    public static func clearPendingGatherFront() {
+        _ = mlx_metal_clear_next_gather_front_persistent_abs()
+    }
+
+    // MARK: - Decode-loop registry
+
+    private static let _registryLock = NSLock()
+    nonisolated(unsafe) private static var _registry: [WeakHandle] = []
+
+    private struct WeakHandle {
+        weak var ref: PersistentGatherFrontAbHandle?
+    }
+
+    private static func register(_ h: PersistentGatherFrontAbHandle) {
+        _registryLock.lock()
+        defer { _registryLock.unlock() }
+        _registry.removeAll { $0.ref == nil }
+        _registry.append(WeakHandle(ref: h))
+    }
+
+    private static func unregister(_ h: PersistentGatherFrontAbHandle) {
+        _registryLock.lock()
+        defer { _registryLock.unlock() }
+        _registry.removeAll { $0.ref === h || $0.ref == nil }
+    }
+
+    /// Retarget the `indices` slot (slot 1) on every live handle to
+    /// point at the supplied array's buffer. Call this between ICB
+    /// replays to update the embedding gather's input-token pointer.
+    public static func setIndicesPtrOnAll(_ array: MLXArray) {
+        _registryLock.lock()
+        let handles = _registry.compactMap { $0.ref }
+        _registryLock.unlock()
+        for h in handles {
+            h.setBufferPtr(slot: .indices, array: array)
+        }
+    }
+
+    public static var liveHandleCount: Int {
+        _registryLock.lock()
+        defer { _registryLock.unlock() }
+        return _registry.compactMap { $0.ref }.count
+    }
+}

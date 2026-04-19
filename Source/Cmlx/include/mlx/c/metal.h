@@ -390,6 +390,35 @@ int mlx_metal_persistent_ab_new_rope_freqs(
     mlx_stream stream);
 
 /**
+ * Allocate a persistent AB with the 5-slot layout used by the
+ * `gather_front_ab` kernel:
+ *   0: BufferPtrOffset   src
+ *   1: BufferPtrOffset   indices
+ *   2: BufferPtrOffset   out
+ *   3: Scalar64          stride
+ *   4: Scalar32          size
+ */
+int mlx_metal_persistent_ab_new_gather_front(
+    mlx_metal_persistent_ab* out,
+    mlx_stream stream);
+
+/**
+ * Push the supplied AB onto the thread-local handoff queue for
+ * upcoming `Gather::eval_gpu` invocations that enter the
+ * gather_front_ab path. FIFO: the next matching gather consumes the
+ * front handle. Call once per gather the caller wants to override
+ * (e.g. 3x for a QuantizedEmbedding lookup: weight/scales/biases).
+ */
+int mlx_metal_push_next_gather_front_persistent_ab(
+    mlx_metal_persistent_ab ab);
+
+/**
+ * Drain the thread-local gather_front_ab handoff queue without
+ * activating new handles. Safe to call when the queue is empty.
+ */
+int mlx_metal_clear_next_gather_front_persistent_abs(void);
+
+/**
  * Write a Float32 slot on a persistent AB. `slot` must reference
  * a Float32 slot in the handle's layout.
  */

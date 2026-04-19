@@ -10,14 +10,14 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#include <Cmlx/mlx-c-array.h>
-#include <Cmlx/mlx-c-closure.h>
-#include <Cmlx/mlx-c-distributed_group.h>
-#include <Cmlx/mlx-c-io_types.h>
-#include <Cmlx/mlx-c-map.h>
-#include <Cmlx/mlx-c-stream.h>
-#include <Cmlx/mlx-c-string.h>
-#include <Cmlx/mlx-c-vector.h>
+#include "mlx/c/array.h"
+#include "mlx/c/closure.h"
+#include "mlx/c/distributed_group.h"
+#include "mlx/c/io_types.h"
+#include "mlx/c/map.h"
+#include "mlx/c/stream.h"
+#include "mlx/c/string.h"
+#include "mlx/c/vector.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -166,6 +166,308 @@ int mlx_metal_icb_recorder_size(mlx_metal_icb_recorder rec, size_t* res);
  * Release a recorder. Safe to pass a recorder whose `ctx` is NULL.
  */
 int mlx_metal_icb_recorder_free(mlx_metal_icb_recorder rec);
+
+/**
+ * Opaque handle to a build-only session's output: the per-step
+ * `(tag_id, MTLBuffer, offset)` AB override triples plus the
+ * shared_ptr/array temporaries that retain those MTLBuffers until
+ * replay completes. Produced by `mlx_metal_icb_end_build_only`,
+ * consumed by `mlx_metal_icb_replay_with_session`, freed by
+ * `mlx_metal_icb_build_only_session_free`.
+ */
+typedef struct mlx_metal_icb_build_only_session_ {
+  void* ctx;
+} mlx_metal_icb_build_only_session;
+
+/**
+ * Begin a build-only session on `stream`'s CommandEncoder. Until
+ * `mlx_metal_icb_end_build_only` is called, every dispatch that
+ * would normally route through the encoder becomes a no-op; the only
+ * live effect is `tag_ab_binding` recording the per-step AB
+ * MTLBuffers into the build-only collector. Primitives still allocate
+ * output arrays and construct transient ABs — those flow into the
+ * session's retentions.
+ *
+ * Intended usage: called by the decode-loop ICB orchestrator to
+ * rebuild the per-step AB MTLBuffers whose packed contents encode
+ * the current step's activation/cache pointers, without paying the
+ * cost of dispatching kernels (the recorded ICB does the compute on
+ * replay with the freshly-collected AB buffers as overrides).
+ *
+ * Build-only is mutually exclusive with recording.
+ */
+int mlx_metal_icb_begin_build_only(mlx_stream stream);
+
+/**
+ * Finalize the build-only session on `stream`, transferring the
+ * collected AB overrides + retentions into `*out_session`. Caller
+ * owns the session and must free it with
+ * `mlx_metal_icb_build_only_session_free` after replay completes.
+ */
+int mlx_metal_icb_end_build_only(
+    mlx_stream stream,
+    mlx_metal_icb_build_only_session* out_session);
+
+/**
+ * Replay `rec` on `stream`, using the AB override triples collected
+ * in `session` as the substitute bindings. Equivalent to
+ * `mlx_metal_icb_replay_with_overrides` but sources the override
+ * triples directly from the build-only session (no Swift-side
+ * marshalling of tag IDs / buffer pointers needed).
+ */
+int mlx_metal_icb_replay_with_session(
+    mlx_stream stream,
+    mlx_metal_icb_recorder rec,
+    mlx_metal_icb_build_only_session session);
+
+/**
+ * Number of AB overrides collected in the session. Diagnostic —
+ * should match the number of `tag_ab_binding` calls during the
+ * recording's forward pass.
+ */
+int mlx_metal_icb_build_only_session_count(
+    mlx_metal_icb_build_only_session session,
+    size_t* res);
+
+/**
+ * Release a build-only session. Safe to pass a session whose `ctx`
+ * is NULL. Call only after any replay using the session has
+ * completed (otherwise the retained MTLBuffers may be freed while
+ * the GPU is still reading them).
+ */
+int mlx_metal_icb_build_only_session_free(
+    mlx_metal_icb_build_only_session session);
+
+/**
+ * Pin session — stable-address allocator reuse for decode-loop ICB
+ * Option (b). A pin session captures the `array::Data` shared_ptr
+ * produced by every `array::set_data` call on the calling thread
+ * during a "record" phase, then reuses those same Data instances
+ * during subsequent "replay" phases — each replay pass pins every
+ * output MLXArray at the same MTLBuffer address as record time.
+ *
+ * Combined with a recorded ICB, this eliminates the need for
+ * per-binding overrides: every recorded binding remains valid
+ * because the allocator's reuse pattern guarantees the same
+ * addresses on replay.
+ *
+ * Opaque handle to a `mlx::core::detail::PinSession*`.
+ */
+typedef struct mlx_pin_session_ {
+  void* ctx;
+} mlx_pin_session;
+
+/**
+ * Begin a pin session in Record phase on the calling thread.
+ * Returns the session handle via `*out`; caller owns and must free.
+ * Subsequent `mlx_array` allocations on this thread are captured.
+ * Throws if a session is already active on this thread.
+ */
+int mlx_pin_session_begin_record(mlx_pin_session* out);
+
+/**
+ * End the record phase. Returns the number of slots captured via
+ * `*slot_count`. The session handle stays alive; it can now be
+ * passed to `mlx_pin_session_begin_replay`.
+ */
+int mlx_pin_session_end_record(mlx_pin_session session, size_t* slot_count);
+
+/**
+ * Begin a pin session in Replay phase on the calling thread.
+ * Each subsequent `mlx_array` allocation discards the fresh buffer
+ * and reuses the record-time buffer at the same slot index.
+ */
+int mlx_pin_session_begin_replay(mlx_pin_session session);
+
+/**
+ * End the replay phase. Returns the number of slots consumed via
+ * `*consumed` — a mismatch vs the recorded slot count indicates
+ * graph divergence (different primitive topology than record time).
+ */
+int mlx_pin_session_end_replay(size_t* consumed);
+
+/**
+ * Release the session. Safe to pass a handle whose `ctx` is NULL.
+ * Must only be called when the session is not attached to any
+ * thread (no begin_record / begin_replay without a matching end).
+ */
+int mlx_pin_session_free(mlx_pin_session session);
+
+/**
+ * Diagnostic — total slots captured during record.
+ */
+int mlx_pin_session_slot_count(mlx_pin_session session, size_t* res);
+
+/**@}*/
+
+/**@defgroup metal_persistent_ab Metal persistent argument buffers */
+/**@{*/
+
+/**
+ * Opaque handle to a caller-owned ArgumentBuffer whose MTLBuffer
+ * address is stable across decode steps. Used for decode-loop ICB
+ * replay: record once, then rewrite scalar slots (e.g. axis_size,
+ * eps, w_stride for RMSNorm) from Swift and replay the ICB without
+ * re-encoding dispatches.
+ *
+ * Each persistent AB has a fixed slot layout baked in at creation
+ * by the factory function. Per-primitive factories enforce the
+ * right layout for that primitive.
+ */
+typedef struct mlx_metal_persistent_ab_ {
+  void* ctx;
+} mlx_metal_persistent_ab;
+
+/**
+ * Create a PersistentAb pre-configured for RMSNorm. Slot layout:
+ *   0: BufferPtrOffset   x
+ *   1: BufferPtrOffset   w
+ *   2: BufferPtrOffset   out
+ *   3: Float32           eps
+ *   4: Scalar32          axis_size
+ *   5: Scalar32          w_stride
+ *
+ * Buffer-ptr slots (0, 1, 2) are populated by mlx C++ in each
+ * `rms_norm` call. Caller is responsible for writing the scalar
+ * slots (3, 4, 5) — typically once at handle creation, since
+ * axis_size / eps / w_stride don't change across decode steps.
+ *
+ * `out` takes ownership of the handle; free with
+ * `mlx_metal_persistent_ab_free`.
+ */
+int mlx_metal_persistent_ab_new_rmsnorm(
+    mlx_metal_persistent_ab* out,
+    mlx_stream stream);
+
+/**
+ * Create a PersistentAb pre-configured for SDPA (unified vector
+ * kernel). 18-slot layout matching SdpaUnifiedArgs in
+ * kernels/sdpa_unified.h:
+ *   0-5:  BufferPtrOffset   queries, keys, values, out, mask, sinks
+ *   6-9:  Scalar64          k_head_stride, k_seq_stride,
+ *                           v_head_stride, v_seq_stride
+ *   10:   Float32           scale
+ *   11-17:Scalar32          gqa_factor, N (T_k), blocks,
+ *                           mask_kv_seq_stride, mask_q_seq_stride,
+ *                           mask_head_stride, num_q_heads
+ *
+ * Buffer-ptr slots (0-5) + most scalars are populated by mlx C++
+ * per call. The caller may additionally update N (slot 12, T_k)
+ * between ICB replays to reflect the current decode step's
+ * K-sequence length.
+ */
+int mlx_metal_persistent_ab_new_sdpa(
+    mlx_metal_persistent_ab* out,
+    mlx_stream stream);
+
+/**
+ * Create a PersistentAb for RoPE base-path (6 slots). Layout:
+ *   0: BufferPtrOffset   in
+ *   1: BufferPtrOffset   out
+ *   2: BufferPtrOffset   offset
+ *   3: Float32           scale
+ *   4: Scalar64          stride
+ *   5: Float32           base
+ * Buffer-ptrs (0,1,2) are populated by mlx C++ per call. Constants
+ * (3,4,5) typically written once at handle creation.
+ */
+int mlx_metal_persistent_ab_new_rope(
+    mlx_metal_persistent_ab* out,
+    mlx_stream stream);
+
+/**
+ * Create a PersistentAb for RoPE freqs-path (7 slots). Layout:
+ *   0: BufferPtrOffset   in
+ *   1: BufferPtrOffset   out
+ *   2: BufferPtrOffset   offset
+ *   3: Float32           scale
+ *   4: Scalar64          stride
+ *   5: BufferPtrOffset   freqs
+ *   6: Scalar64          freq_stride
+ */
+int mlx_metal_persistent_ab_new_rope_freqs(
+    mlx_metal_persistent_ab* out,
+    mlx_stream stream);
+
+/**
+ * Allocate a persistent AB with the 5-slot layout used by the
+ * `gather_front_ab` kernel:
+ *   0: BufferPtrOffset   src
+ *   1: BufferPtrOffset   indices
+ *   2: BufferPtrOffset   out
+ *   3: Scalar64          stride
+ *   4: Scalar32          size
+ */
+int mlx_metal_persistent_ab_new_gather_front(
+    mlx_metal_persistent_ab* out,
+    mlx_stream stream);
+
+/**
+ * Push the supplied AB onto the thread-local handoff queue for
+ * upcoming `Gather::eval_gpu` invocations that enter the
+ * gather_front_ab path. FIFO: the next matching gather consumes the
+ * front handle. Call once per gather the caller wants to override
+ * (e.g. 3x for a QuantizedEmbedding lookup: weight/scales/biases).
+ */
+int mlx_metal_push_next_gather_front_persistent_ab(
+    mlx_metal_persistent_ab ab);
+
+/**
+ * Drain the thread-local gather_front_ab handoff queue without
+ * activating new handles. Safe to call when the queue is empty.
+ */
+int mlx_metal_clear_next_gather_front_persistent_abs(void);
+
+/**
+ * Write a Float32 slot on a persistent AB. `slot` must reference
+ * a Float32 slot in the handle's layout.
+ */
+int mlx_metal_persistent_ab_set_float32(
+    mlx_metal_persistent_ab ab,
+    int slot,
+    float value);
+
+/**
+ * Write a Scalar32 slot on a persistent AB. `slot` must reference
+ * a Scalar32 slot in the handle's layout.
+ */
+int mlx_metal_persistent_ab_set_scalar32(
+    mlx_metal_persistent_ab ab,
+    int slot,
+    uint32_t value);
+
+/**
+ * Write a Scalar64 slot on a persistent AB. `slot` must reference
+ * a Scalar64 slot in the handle's layout.
+ */
+int mlx_metal_persistent_ab_set_scalar64(
+    mlx_metal_persistent_ab ab,
+    int slot,
+    uint64_t value);
+
+/**
+ * Write a BufferPtrOffset slot on a persistent AB — overwrite the
+ * AB's stored `(buffer_addr, offset)` pair at `slot` with the
+ * MTLBuffer underlying `array` (offset included from the array's
+ * storage). `slot` must reference a BufferPtrOffset slot in the
+ * handle's layout.
+ *
+ * Used by the decode-loop ICB orchestrator to retarget per-step
+ * buffer-pointer slots (e.g. RoPE's `offset` slot) on a persistent
+ * AB that's already been recorded into an ICB — the AB's buffer
+ * contents are mutated in place, so the recorded dispatch picks up
+ * the new pointer without needing a kernel re-bind.
+ */
+int mlx_metal_persistent_ab_set_buffer_ptr(
+    mlx_metal_persistent_ab ab,
+    int slot,
+    const mlx_array array);
+
+/**
+ * Release a persistent AB. Safe to pass a handle whose `ctx` is NULL.
+ * The underlying MTLBuffer is returned to the pool.
+ */
+int mlx_metal_persistent_ab_free(mlx_metal_persistent_ab ab);
 
 /**@}*/
 
