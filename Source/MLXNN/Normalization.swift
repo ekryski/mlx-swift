@@ -130,14 +130,26 @@ open class RMSNorm: Module, UnaryLayer {
     public let eps: Float
 
     // Optional persistent argument buffer for decode-loop ICB replay.
-    // Lazy-initialized on the first call when MLX_PERSISTENT_AB=1 is
-    // set. One handle per module instance (so one per layer). Static
-    // scalars (axis_size, w_stride, eps) are written once at init;
-    // buffer pointers are updated per call by mlx C++.
     //
-    // Not Sendable and not part of Module's parameter set — purely
-    // eval-state for the AB path.
+    // Default: driven by `MLX_PERSISTENT_AB=1`, matching the other
+    // persistent-AB opt-ins. Models that are known to break under
+    // this path (e.g. Gemma 4 E2B — see `Gemma4Model.init`) should
+    // set `usePersistentAb = false` explicitly on every RMSNorm
+    // they instantiate, so the env flag keeps working for
+    // known-good models while the untested ones stay on the
+    // transient-AB fallback.
+    //
+    // One handle per module instance. Static scalars
+    // (axis_size, w_stride, eps) are written once at init; buffer
+    // pointers are updated per call by mlx C++. Not Sendable and
+    // not part of Module's parameter set — purely eval-state.
+    public var usePersistentAb: Bool = RMSNorm.defaultPersistentAbEnabled
     private var persistentAb: PersistentRmsAbHandle?
+
+    private static let defaultPersistentAbEnabled: Bool = {
+        let env = ProcessInfo.processInfo.environment["MLX_PERSISTENT_AB"]
+        return env == "1"
+    }()
 
     public init(dimensions: Int, eps: Float = 1e-5) {
         self.weight = MLXArray.ones([dimensions])
@@ -151,21 +163,13 @@ open class RMSNorm: Module, UnaryLayer {
     }
 
     open func callAsFunction(_ x: MLXArray) -> MLXArray {
-        if Self.persistentAbEnabled {
+        if usePersistentAb {
             let handle = persistentAbHandle(hidden: weight.dim(0))
             return MLXFast.rmsNormAb(
                 x, weight: weight, eps: eps, handle: handle)
         }
         return MLXFast.rmsNorm(x, weight: weight, eps: eps)
     }
-
-    /// Cached env-var check — MLX_PERSISTENT_AB=1 activates the
-    /// handle-backed RMSNorm path. Gated off by default so existing
-    /// callers see no behavior change.
-    private static let persistentAbEnabled: Bool = {
-        let env = ProcessInfo.processInfo.environment["MLX_PERSISTENT_AB"]
-        return env == "1"
-    }()
 
     /// Lazy-initialize the handle on first call and write the static
     /// scalars. `hidden` = last dimension of `weight` (axis_size).
