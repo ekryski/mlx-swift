@@ -167,6 +167,77 @@ int mlx_metal_icb_recorder_size(mlx_metal_icb_recorder rec, size_t* res);
  */
 int mlx_metal_icb_recorder_free(mlx_metal_icb_recorder rec);
 
+/**
+ * Opaque handle to a build-only session's output: the per-step
+ * `(tag_id, MTLBuffer, offset)` AB override triples plus the
+ * shared_ptr/array temporaries that retain those MTLBuffers until
+ * replay completes. Produced by `mlx_metal_icb_end_build_only`,
+ * consumed by `mlx_metal_icb_replay_with_session`, freed by
+ * `mlx_metal_icb_build_only_session_free`.
+ */
+typedef struct mlx_metal_icb_build_only_session_ {
+  void* ctx;
+} mlx_metal_icb_build_only_session;
+
+/**
+ * Begin a build-only session on `stream`'s CommandEncoder. Until
+ * `mlx_metal_icb_end_build_only` is called, every dispatch that
+ * would normally route through the encoder becomes a no-op; the only
+ * live effect is `tag_ab_binding` recording the per-step AB
+ * MTLBuffers into the build-only collector. Primitives still allocate
+ * output arrays and construct transient ABs — those flow into the
+ * session's retentions.
+ *
+ * Intended usage: called by the decode-loop ICB orchestrator to
+ * rebuild the per-step AB MTLBuffers whose packed contents encode
+ * the current step's activation/cache pointers, without paying the
+ * cost of dispatching kernels (the recorded ICB does the compute on
+ * replay with the freshly-collected AB buffers as overrides).
+ *
+ * Build-only is mutually exclusive with recording.
+ */
+int mlx_metal_icb_begin_build_only(mlx_stream stream);
+
+/**
+ * Finalize the build-only session on `stream`, transferring the
+ * collected AB overrides + retentions into `*out_session`. Caller
+ * owns the session and must free it with
+ * `mlx_metal_icb_build_only_session_free` after replay completes.
+ */
+int mlx_metal_icb_end_build_only(
+    mlx_stream stream,
+    mlx_metal_icb_build_only_session* out_session);
+
+/**
+ * Replay `rec` on `stream`, using the AB override triples collected
+ * in `session` as the substitute bindings. Equivalent to
+ * `mlx_metal_icb_replay_with_overrides` but sources the override
+ * triples directly from the build-only session (no Swift-side
+ * marshalling of tag IDs / buffer pointers needed).
+ */
+int mlx_metal_icb_replay_with_session(
+    mlx_stream stream,
+    mlx_metal_icb_recorder rec,
+    mlx_metal_icb_build_only_session session);
+
+/**
+ * Number of AB overrides collected in the session. Diagnostic —
+ * should match the number of `tag_ab_binding` calls during the
+ * recording's forward pass.
+ */
+int mlx_metal_icb_build_only_session_count(
+    mlx_metal_icb_build_only_session session,
+    size_t* res);
+
+/**
+ * Release a build-only session. Safe to pass a session whose `ctx`
+ * is NULL. Call only after any replay using the session has
+ * completed (otherwise the retained MTLBuffers may be freed while
+ * the GPU is still reading them).
+ */
+int mlx_metal_icb_build_only_session_free(
+    mlx_metal_icb_build_only_session session);
+
 /**@}*/
 
 /**@defgroup metal_persistent_ab Metal persistent argument buffers */
@@ -230,14 +301,29 @@ int mlx_metal_persistent_ab_new_sdpa(
     mlx_stream stream);
 
 /**
- * Create a PersistentAb for RoPE base-path (6 slots).
+ * Create a PersistentAb for RoPE base-path (6 slots). Layout:
+ *   0: BufferPtrOffset   in
+ *   1: BufferPtrOffset   out
+ *   2: BufferPtrOffset   offset
+ *   3: Float32           scale
+ *   4: Scalar64          stride
+ *   5: Float32           base
+ * Buffer-ptrs (0,1,2) are populated by mlx C++ per call. Constants
+ * (3,4,5) typically written once at handle creation.
  */
 int mlx_metal_persistent_ab_new_rope(
     mlx_metal_persistent_ab* out,
     mlx_stream stream);
 
 /**
- * Create a PersistentAb for RoPE freqs-path (7 slots).
+ * Create a PersistentAb for RoPE freqs-path (7 slots). Layout:
+ *   0: BufferPtrOffset   in
+ *   1: BufferPtrOffset   out
+ *   2: BufferPtrOffset   offset
+ *   3: Float32           scale
+ *   4: Scalar64          stride
+ *   5: BufferPtrOffset   freqs
+ *   6: Scalar64          freq_stride
  */
 int mlx_metal_persistent_ab_new_rope_freqs(
     mlx_metal_persistent_ab* out,

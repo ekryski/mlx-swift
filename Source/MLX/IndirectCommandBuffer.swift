@@ -261,6 +261,94 @@ public final class IndirectCommandBuffer: @unchecked Sendable {
         }
     }
 
+    /// Opaque container for the output of a build-only forward pass: the
+    /// per-step AB MTLBuffer overrides collected by mlx C++, plus the
+    /// temporary ArgumentBuffer / output-array retentions that keep those
+    /// MTLBuffers alive until the replay using them completes.
+    ///
+    /// Pair with `IndirectCommandBuffer.replay(withSession:stream:)`. The
+    /// session must stay alive until that replay has been scheduled and
+    /// its work has been dispatched — on the default decode loop the
+    /// simplest rule is "hold the session in the iterator until the next
+    /// step's build-only forward finishes, then drop".
+    public final class BuildOnlySession: @unchecked Sendable {
+        fileprivate var ctx: mlx_metal_icb_build_only_session
+
+        fileprivate init(ctx: mlx_metal_icb_build_only_session) {
+            self.ctx = ctx
+        }
+
+        deinit {
+            _ = mlx_metal_icb_build_only_session_free(ctx)
+        }
+
+        /// Number of AB overrides collected during the build-only pass.
+        /// Should match the number of `tag_ab_binding` calls during the
+        /// recorded forward pass; a mismatch indicates the build-only
+        /// graph walk diverged from the recording (different shape,
+        /// different cache state, different code path taken).
+        public var count: Int {
+            var out: Int = 0
+            _ = mlx_metal_icb_build_only_session_count(ctx, &out)
+            return out
+        }
+    }
+
+    /// Run `block` as a build-only forward pass: every dispatch routed
+    /// through the stream's encoder becomes a no-op, but primitives
+    /// still allocate their output arrays and construct transient
+    /// ArgumentBuffers whose packed contents encode this step's
+    /// activation/cache pointers. Each transient AB is tagged with a
+    /// sequential ID; the returned session records those `(id, MTLBuffer)`
+    /// pairs.
+    ///
+    /// Intended use: between live warmup + recording and ICB replay, the
+    /// decode-loop orchestrator calls this to rebuild the per-step AB
+    /// MTLBuffers, then hands the session to
+    /// `replay(withSession:stream:)` to execute the recorded ICB with
+    /// the fresh ABs substituted in.
+    ///
+    /// Mutually exclusive with `record(...)` on the same thread.
+    public static func buildOnly(
+        stream: StreamOrDevice = .default,
+        _ block: () throws -> Void
+    ) rethrows -> BuildOnlySession {
+        _ = mlx_metal_icb_begin_build_only(stream.ctx)
+
+        var threw: Error? = nil
+        do {
+            try block()
+        } catch {
+            threw = error
+        }
+
+        var session = mlx_metal_icb_build_only_session(ctx: nil)
+        let rc = mlx_metal_icb_end_build_only(stream.ctx, &session)
+        if threw != nil {
+            if rc == 0 {
+                _ = mlx_metal_icb_build_only_session_free(session)
+            }
+            try { throw threw! }()
+        }
+        if rc != 0 {
+            preconditionFailure(
+                "mlx_metal_icb_end_build_only failed (see mlx error log)")
+        }
+        return BuildOnlySession(ctx: session)
+    }
+
+    /// Replay this recorded ICB on `stream`, substituting each tagged
+    /// AB binding with the matching MTLBuffer collected by `session`.
+    /// Faster than `replay(overrides:)` when overrides come from a
+    /// build-only pass — no Swift-side marshalling of the override
+    /// triples.
+    public func replay(
+        withSession session: BuildOnlySession,
+        stream: StreamOrDevice = .default
+    ) {
+        _ = mlx_metal_icb_replay_with_session(stream.ctx, ctx, session.ctx)
+    }
+
     /// Number of ICB segments (barrier-separated blocks) in this recording.
     public var numSegments: Int {
         var out: Int = 0
