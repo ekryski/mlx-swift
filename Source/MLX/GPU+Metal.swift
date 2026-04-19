@@ -193,6 +193,66 @@ public enum GPU {
         mlx_metal_stop_capture()
     }
 
+    /// Reset the Metal dispatch counter on the default command encoder.
+    ///
+    /// Use together with ``totalDispatches()`` to count the number of Metal
+    /// kernel launches MLX issued between two program points. Useful for
+    /// auditing per-token dispatch counts (e.g. for Metal Indirect Command
+    /// Buffer feasibility studies) or verifying that dispatch-reducing
+    /// optimizations (kernel fusion, graph caching) actually reduced the
+    /// count they were intended to reduce.
+    ///
+    /// ```swift
+    /// GPU.resetDispatchCounter()
+    /// _ = try await model.generateOneToken(...)
+    /// let count = GPU.totalDispatches()
+    /// ```
+    public static func resetDispatchCounter() {
+        mlx_metal_reset_dispatch_counter()
+    }
+
+    /// Cumulative count of Metal kernel dispatches (i.e. dispatchThreads /
+    /// dispatchThreadgroups calls) since the last ``resetDispatchCounter()``.
+    public static func totalDispatches() -> UInt64 {
+        var count: UInt64 = 0
+        mlx_metal_total_dispatches(&count)
+        return count
+    }
+
+    /// Start recording the Metal pipeline-state label of every dispatch.
+    /// Calling this clears any prior log.
+    ///
+    /// Paired with ``stopKernelLog()`` and ``kernelLog()`` for the ICB
+    /// dispatch-list stability audit: identical kernel sequences across two
+    /// decode tokens mean the Indirect Command Buffer encode-once / execute-many
+    /// path is viable.
+    public static func startKernelLog() {
+        mlx_metal_start_kernel_log()
+    }
+
+    /// Stop recording kernel labels. Idempotent.
+    public static func stopKernelLog() {
+        mlx_metal_stop_kernel_log()
+    }
+
+    /// Return the current kernel log as a `[String]`, in dispatch order.
+    public static func kernelLog() -> [String] {
+        var size: Int = 0
+        mlx_metal_kernel_log_size(&size)
+        var out: [String] = []
+        out.reserveCapacity(size)
+        for i in 0 ..< size {
+            var label: UnsafePointer<CChar>? = nil
+            mlx_metal_kernel_log_at(i, &label)
+            if let label {
+                out.append(String(cString: label))
+            } else {
+                out.append("")
+            }
+        }
+        return out
+    }
+
     /// Reset the peak memory to zero.
     ///
     /// See ``Memory/Snapshot/peakMemory``.

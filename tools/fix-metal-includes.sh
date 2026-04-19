@@ -26,7 +26,13 @@ gemv.metal \
 layer_norm.metal \
 random.metal \
 rms_norm.metal \
+rms_norm_ab.metal \
 rope.metal \
+rope_ab.metal \
+affine_qmv_ab.metal \
+gather_front_ab.metal \
+affine_gather_qmv_ab.metal \
+elementwise_ab.metal \
 scaled_dot_product_attention.metal \
 steel/attn/kernels/steel_attention.metal"
 
