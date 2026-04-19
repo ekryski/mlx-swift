@@ -238,6 +238,66 @@ int mlx_metal_icb_build_only_session_count(
 int mlx_metal_icb_build_only_session_free(
     mlx_metal_icb_build_only_session session);
 
+/**
+ * Pin session — stable-address allocator reuse for decode-loop ICB
+ * Option (b). A pin session captures the `array::Data` shared_ptr
+ * produced by every `array::set_data` call on the calling thread
+ * during a "record" phase, then reuses those same Data instances
+ * during subsequent "replay" phases — each replay pass pins every
+ * output MLXArray at the same MTLBuffer address as record time.
+ *
+ * Combined with a recorded ICB, this eliminates the need for
+ * per-binding overrides: every recorded binding remains valid
+ * because the allocator's reuse pattern guarantees the same
+ * addresses on replay.
+ *
+ * Opaque handle to a `mlx::core::detail::PinSession*`.
+ */
+typedef struct mlx_pin_session_ {
+  void* ctx;
+} mlx_pin_session;
+
+/**
+ * Begin a pin session in Record phase on the calling thread.
+ * Returns the session handle via `*out`; caller owns and must free.
+ * Subsequent `mlx_array` allocations on this thread are captured.
+ * Throws if a session is already active on this thread.
+ */
+int mlx_pin_session_begin_record(mlx_pin_session* out);
+
+/**
+ * End the record phase. Returns the number of slots captured via
+ * `*slot_count`. The session handle stays alive; it can now be
+ * passed to `mlx_pin_session_begin_replay`.
+ */
+int mlx_pin_session_end_record(mlx_pin_session session, size_t* slot_count);
+
+/**
+ * Begin a pin session in Replay phase on the calling thread.
+ * Each subsequent `mlx_array` allocation discards the fresh buffer
+ * and reuses the record-time buffer at the same slot index.
+ */
+int mlx_pin_session_begin_replay(mlx_pin_session session);
+
+/**
+ * End the replay phase. Returns the number of slots consumed via
+ * `*consumed` — a mismatch vs the recorded slot count indicates
+ * graph divergence (different primitive topology than record time).
+ */
+int mlx_pin_session_end_replay(size_t* consumed);
+
+/**
+ * Release the session. Safe to pass a handle whose `ctx` is NULL.
+ * Must only be called when the session is not attached to any
+ * thread (no begin_record / begin_replay without a matching end).
+ */
+int mlx_pin_session_free(mlx_pin_session session);
+
+/**
+ * Diagnostic — total slots captured during record.
+ */
+int mlx_pin_session_slot_count(mlx_pin_session session, size_t* res);
+
 /**@}*/
 
 /**@defgroup metal_persistent_ab Metal persistent argument buffers */
