@@ -167,12 +167,33 @@ public final class PersistentSdpaAbHandle {
     /// Update the `N` (T_k) slot on every live SDPA handle. Called by
     /// the decode-loop ICB orchestrator each replay step so all
     /// attention layers attend to the current K-sequence length.
+    ///
+    /// This sets the SAME `N` on every layer — use only when every
+    /// attention layer sees the same K-sequence length. For models
+    /// with mixed layer types (e.g. GPT-OSS sliding + full
+    /// attention, where sliding is capped at `windowSize` once the
+    /// window rolls) use `updateNPerLayer` instead.
     public static func updateNOnAll(_ n: UInt32) {
         _registryLock.lock()
         let handles = _registry.compactMap { $0.ref }
         _registryLock.unlock()
         for h in handles {
             h.setScalar32(slot: .N, value: n)
+        }
+    }
+
+    /// Update each handle's `N` (T_k) slot to the corresponding
+    /// entry in `ns`. Index i maps to the i-th registered handle,
+    /// which — provided handles register in layer order at model
+    /// init — corresponds to layer i's attention block. Entries
+    /// beyond `ns.count` are left unchanged; if fewer handles are
+    /// live than `ns` entries, the trailing entries are ignored.
+    public static func updateNPerLayer(_ ns: [UInt32]) {
+        _registryLock.lock()
+        let handles = _registry.compactMap { $0.ref }
+        _registryLock.unlock()
+        for (i, h) in handles.enumerated() where i < ns.count {
+            h.setScalar32(slot: .N, value: ns[i])
         }
     }
 
