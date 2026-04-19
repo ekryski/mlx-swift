@@ -129,6 +129,16 @@ open class RMSNorm: Module, UnaryLayer {
     public let weight: MLXArray
     public let eps: Float
 
+    // Optional persistent argument buffer for decode-loop ICB replay.
+    // Lazy-initialized on the first call when MLX_PERSISTENT_AB=1 is
+    // set. One handle per module instance (so one per layer). Static
+    // scalars (axis_size, w_stride, eps) are written once at init;
+    // buffer pointers are updated per call by mlx C++.
+    //
+    // Not Sendable and not part of Module's parameter set — purely
+    // eval-state for the AB path.
+    private var persistentAb: PersistentRmsAbHandle?
+
     public init(dimensions: Int, eps: Float = 1e-5) {
         self.weight = MLXArray.ones([dimensions])
         self.eps = eps
@@ -141,7 +151,36 @@ open class RMSNorm: Module, UnaryLayer {
     }
 
     open func callAsFunction(_ x: MLXArray) -> MLXArray {
-        MLXFast.rmsNorm(x, weight: weight, eps: eps)
+        if Self.persistentAbEnabled {
+            let handle = persistentAbHandle(hidden: weight.dim(0))
+            return MLXFast.rmsNormAb(
+                x, weight: weight, eps: eps, handle: handle)
+        }
+        return MLXFast.rmsNorm(x, weight: weight, eps: eps)
+    }
+
+    /// Cached env-var check — MLX_PERSISTENT_AB=1 activates the
+    /// handle-backed RMSNorm path. Gated off by default so existing
+    /// callers see no behavior change.
+    private static let persistentAbEnabled: Bool = {
+        let env = ProcessInfo.processInfo.environment["MLX_PERSISTENT_AB"]
+        return env == "1"
+    }()
+
+    /// Lazy-initialize the handle on first call and write the static
+    /// scalars. `hidden` = last dimension of `weight` (axis_size).
+    /// `w_stride` is always 1 for this Module (weight is 1D, unit
+    /// stride).
+    private func persistentAbHandle(hidden: Int) -> PersistentRmsAbHandle {
+        if let existing = persistentAb {
+            return existing
+        }
+        let handle = PersistentRmsAbHandle()
+        handle.setScalar32(slot: .axisSize, value: UInt32(hidden))
+        handle.setScalar32(slot: .wStride, value: 1)
+        handle.setFloat32(slot: .eps, value: eps)
+        persistentAb = handle
+        return handle
     }
 }
 

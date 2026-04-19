@@ -267,6 +267,30 @@ public enum MLXFast {
         return MLXArray(result)
     }
 
+    /// RMSNorm overload that participates in decode-loop ICB replay via
+    /// a caller-owned `PersistentRmsAbHandle`. Identical numerically to
+    /// the plain `rmsNorm` but the dispatch binds the handle's
+    /// stable-address argument buffer instead of allocating a transient
+    /// one — so an ICB recording of this call replays correctly at the
+    /// next decode step after the caller updates handle contents.
+    ///
+    /// When `handle` is `nil` this reduces to the plain `rmsNorm`.
+    public static func rmsNormAb(
+        _ x: MLXArray,
+        weight: MLXArray,
+        eps: Float,
+        handle: PersistentRmsAbHandle?,
+        stream: StreamOrDevice = .default
+    ) -> MLXArray {
+        guard let handle else {
+            return rmsNorm(x, weight: weight, eps: eps, stream: stream)
+        }
+        var result = mlx_array_new()
+        mlx_fast_rms_norm_ab(
+            &result, x.ctx, weight.ctx, eps, handle.ctx, stream.ctx)
+        return MLXArray(result)
+    }
+
     /// Fused RMSNorm + Residual Add operation.
     ///
     /// Computes `residual + rmsNorm(x, weight, eps)` in a single Metal dispatch.

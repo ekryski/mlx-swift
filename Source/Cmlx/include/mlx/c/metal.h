@@ -169,6 +169,71 @@ int mlx_metal_icb_recorder_free(mlx_metal_icb_recorder rec);
 
 /**@}*/
 
+/**@defgroup metal_persistent_ab Metal persistent argument buffers */
+/**@{*/
+
+/**
+ * Opaque handle to a caller-owned ArgumentBuffer whose MTLBuffer
+ * address is stable across decode steps. Used for decode-loop ICB
+ * replay: record once, then rewrite scalar slots (e.g. axis_size,
+ * eps, w_stride for RMSNorm) from Swift and replay the ICB without
+ * re-encoding dispatches.
+ *
+ * Each persistent AB has a fixed slot layout baked in at creation
+ * by the factory function. Per-primitive factories enforce the
+ * right layout for that primitive.
+ */
+typedef struct mlx_metal_persistent_ab_ {
+  void* ctx;
+} mlx_metal_persistent_ab;
+
+/**
+ * Create a PersistentAb pre-configured for RMSNorm. Slot layout:
+ *   0: BufferPtrOffset   x
+ *   1: BufferPtrOffset   w
+ *   2: BufferPtrOffset   out
+ *   3: Float32           eps
+ *   4: Scalar32          axis_size
+ *   5: Scalar32          w_stride
+ *
+ * Buffer-ptr slots (0, 1, 2) are populated by mlx C++ in each
+ * `rms_norm` call. Caller is responsible for writing the scalar
+ * slots (3, 4, 5) — typically once at handle creation, since
+ * axis_size / eps / w_stride don't change across decode steps.
+ *
+ * `out` takes ownership of the handle; free with
+ * `mlx_metal_persistent_ab_free`.
+ */
+int mlx_metal_persistent_ab_new_rmsnorm(
+    mlx_metal_persistent_ab* out,
+    mlx_stream stream);
+
+/**
+ * Write a Float32 slot on a persistent AB. `slot` must reference
+ * a Float32 slot in the handle's layout.
+ */
+int mlx_metal_persistent_ab_set_float32(
+    mlx_metal_persistent_ab ab,
+    int slot,
+    float value);
+
+/**
+ * Write a Scalar32 slot on a persistent AB. `slot` must reference
+ * a Scalar32 slot in the handle's layout.
+ */
+int mlx_metal_persistent_ab_set_scalar32(
+    mlx_metal_persistent_ab ab,
+    int slot,
+    uint32_t value);
+
+/**
+ * Release a persistent AB. Safe to pass a handle whose `ctx` is NULL.
+ * The underlying MTLBuffer is returned to the pool.
+ */
+int mlx_metal_persistent_ab_free(mlx_metal_persistent_ab ab);
+
+/**@}*/
+
 #ifdef __cplusplus
 }
 #endif
