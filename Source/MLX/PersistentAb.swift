@@ -117,9 +117,11 @@ public final class PersistentSdpaAbHandle {
             "mlx_metal_persistent_ab_new_sdpa failed (see mlx error log)"
         )
         self.ctx = handle
+        Self.register(self)
     }
 
     deinit {
+        Self.unregister(self)
         _ = mlx_metal_persistent_ab_free(ctx)
     }
 
@@ -129,6 +131,56 @@ public final class PersistentSdpaAbHandle {
 
     public func setFloat32(slot: Slot, value: Float) {
         _ = mlx_metal_persistent_ab_set_float32(ctx, slot.rawValue, value)
+    }
+
+    // MARK: - Decode-loop registry
+    //
+    // Every live `PersistentSdpaAbHandle` registers itself here so the
+    // decode-loop ICB orchestrator in `TokenIterator` can update the
+    // per-step `N` (T_k) scalar on every handle without needing
+    // per-model plumbing to reach each attention block's handle.
+    //
+    // The registry holds weak refs; deinit removes the entry. Thread-
+    // safe via a simple lock — decode is single-threaded, so contention
+    // is only with model-init on concurrent queues.
+
+    private static let _registryLock = NSLock()
+    nonisolated(unsafe) private static var _registry: [WeakHandle] = []
+
+    private struct WeakHandle {
+        weak var ref: PersistentSdpaAbHandle?
+    }
+
+    private static func register(_ h: PersistentSdpaAbHandle) {
+        _registryLock.lock()
+        defer { _registryLock.unlock() }
+        _registry.removeAll { $0.ref == nil }
+        _registry.append(WeakHandle(ref: h))
+    }
+
+    private static func unregister(_ h: PersistentSdpaAbHandle) {
+        _registryLock.lock()
+        defer { _registryLock.unlock() }
+        _registry.removeAll { $0.ref === h || $0.ref == nil }
+    }
+
+    /// Update the `N` (T_k) slot on every live SDPA handle. Called by
+    /// the decode-loop ICB orchestrator each replay step so all
+    /// attention layers attend to the current K-sequence length.
+    public static func updateNOnAll(_ n: UInt32) {
+        _registryLock.lock()
+        let handles = _registry.compactMap { $0.ref }
+        _registryLock.unlock()
+        for h in handles {
+            h.setScalar32(slot: .N, value: n)
+        }
+    }
+
+    /// Number of live handles — diagnostic.
+    public static var liveHandleCount: Int {
+        _registryLock.lock()
+        defer { _registryLock.unlock() }
+        return _registry.compactMap { $0.ref }.count
     }
 }
 

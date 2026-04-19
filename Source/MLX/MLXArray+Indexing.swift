@@ -832,6 +832,43 @@ func gatherND(
 
 // MARK: - index set (slice)
 
+/// Dynamic slice-update: write `update` into `src` at the per-axis
+/// start positions carried in the `start` MLXArray.
+///
+/// Unlike the Shape-based `mlx_slice_update` (which bakes the offset
+/// into the primitive as a constant), this variant passes the start
+/// position through a buffer. That makes the offset a tagged binding
+/// of the resulting `DynamicSliceUpdate` primitive — for ICB record /
+/// replay, the offset buffer can be overridden per step so the same
+/// recorded dispatch writes to a different position.
+///
+/// - Parameters:
+///   - src: the array being updated (returns a fresh array with the
+///          update applied; MLX's lazy graph handles in-place semantics)
+///   - update: the values to write
+///   - start: int32 MLXArray of shape `[axes.count]` giving the start
+///            position per axis in `axes`
+///   - axes: which axes of `src` the `start` entries correspond to
+public func sliceUpdate(
+    _ src: MLXArray,
+    _ update: MLXArray,
+    start: MLXArray,
+    axes: [Int],
+    stream: StreamOrDevice = .default
+) -> MLXArray {
+    var result = mlx_array_new()
+    let axesInt32 = axes.map { Int32($0) }
+    _ = mlx_slice_update_dynamic(
+        &result,
+        src.ctx,
+        update.ctx,
+        start.ctx,
+        axesInt32,
+        axesInt32.count,
+        stream.ctx)
+    return MLXArray(result)
+}
+
 func updateSlice(
     src: MLXArray, operations: [MLXArrayIndexOperation], update: MLXArray,
     stream: StreamOrDevice = .default
