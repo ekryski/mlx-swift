@@ -1004,6 +1004,20 @@ int mlx_slice_update_dynamic(
     const int* axes,
     size_t axes_num,
     const mlx_stream s);
+/**
+ * In-place variant of `mlx_slice_update_dynamic` — the returned
+ * array shares the input's underlying MTLBuffer. Intended for
+ * decode-loop Indirect Command Buffer replay where the output's
+ * buffer address must remain stable across calls.
+ */
+int mlx_slice_update_inplace_dynamic(
+    mlx_array* res,
+    const mlx_array src,
+    const mlx_array update,
+    const mlx_array start,
+    const int* axes,
+    size_t axes_num,
+    const mlx_stream s);
 int mlx_softmax_axes(
     mlx_array* res,
     const mlx_array a,

@@ -869,6 +869,41 @@ public func sliceUpdate(
     return MLXArray(result)
 }
 
+/// In-place variant of `sliceUpdate(_:_:start:axes:stream:)` — the
+/// returned array shares `src`'s underlying MTLBuffer rather than
+/// having a fresh allocation made via copy_gpu. Semantically this
+/// mutates `src`'s storage; callers that reassign the result back to
+/// the same property (e.g. `self.keys = sliceUpdateInPlace(self.keys, ...)`
+/// in a KV cache) get address-stable buffers suitable for
+/// Indirect Command Buffer replay.
+///
+/// Also a live-path perf win — eliminates the full-buffer copy_gpu
+/// preamble that `sliceUpdate` always dispatches (and that's
+/// pointless when the caller is going to overwrite `src` with the
+/// result anyway).
+///
+/// No autograd / vmap support — use `sliceUpdate` when gradients are
+/// needed.
+public func sliceUpdateInPlace(
+    _ src: MLXArray,
+    _ update: MLXArray,
+    start: MLXArray,
+    axes: [Int],
+    stream: StreamOrDevice = .default
+) -> MLXArray {
+    var result = mlx_array_new()
+    let axesInt32 = axes.map { Int32($0) }
+    _ = mlx_slice_update_inplace_dynamic(
+        &result,
+        src.ctx,
+        update.ctx,
+        start.ctx,
+        axesInt32,
+        axesInt32.count,
+        stream.ctx)
+    return MLXArray(result)
+}
+
 func updateSlice(
     src: MLXArray, operations: [MLXArrayIndexOperation], update: MLXArray,
     stream: StreamOrDevice = .default
