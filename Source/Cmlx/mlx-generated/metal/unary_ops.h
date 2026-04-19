@@ -5,10 +5,10 @@
 #include <metal_integer>
 #include <metal_math>
 
-#include "mlx/backend/metal/kernels/cexpf.h"
-#include "mlx/backend/metal/kernels/erf.h"
-#include "mlx/backend/metal/kernels/expm1f.h"
-#include "mlx/backend/metal/kernels/fp8.h"
+#include "cexpf.h"
+#include "erf.h"
+#include "expm1f.h"
+#include "fp8.h"
 
 namespace {
 constant float inf = metal::numeric_limits<float>::infinity();

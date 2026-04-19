@@ -2,7 +2,7 @@
 
 #pragma once
 #include <metal_math>
-#include "mlx/backend/metal/kernels/expm1f.h"
+#include "expm1f.h"
 
 /*
  * Approximation to the error function.
