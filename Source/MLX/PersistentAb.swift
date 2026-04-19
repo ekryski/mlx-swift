@@ -217,9 +217,11 @@ public final class PersistentRopeAbHandle {
             "mlx_metal_persistent_ab_new_rope failed (see mlx error log)"
         )
         self.ctx = handle
+        Self.register(self)
     }
 
     deinit {
+        Self.unregister(self)
         _ = mlx_metal_persistent_ab_free(ctx)
     }
 
@@ -229,6 +231,55 @@ public final class PersistentRopeAbHandle {
 
     public func setScalar64(slot: Slot, value: UInt64) {
         _ = mlx_metal_persistent_ab_set_scalar64(ctx, slot.rawValue, value)
+    }
+
+    /// Retarget a BufferPtrOffset slot (e.g. `.offset`) to the storage
+    /// underlying `array`. Used by the decode-loop iterator to point
+    /// the recorded RoPE AB at this step's offset MLXArray without
+    /// re-recording the ICB.
+    public func setBufferPtr(slot: Slot, array: MLXArray) {
+        _ = mlx_metal_persistent_ab_set_buffer_ptr(ctx, slot.rawValue, array.ctx)
+    }
+
+    // MARK: - Decode-loop registry
+
+    private static let _registryLock = NSLock()
+    nonisolated(unsafe) private static var _registry: [WeakHandle] = []
+
+    private struct WeakHandle {
+        weak var ref: PersistentRopeAbHandle?
+    }
+
+    private static func register(_ h: PersistentRopeAbHandle) {
+        _registryLock.lock()
+        defer { _registryLock.unlock() }
+        _registry.removeAll { $0.ref == nil }
+        _registry.append(WeakHandle(ref: h))
+    }
+
+    private static func unregister(_ h: PersistentRopeAbHandle) {
+        _registryLock.lock()
+        defer { _registryLock.unlock() }
+        _registry.removeAll { $0.ref === h || $0.ref == nil }
+    }
+
+    /// Retarget every live base-path RoPE handle's `.offset` slot to
+    /// `array`'s underlying storage. Called by the decode-loop ICB
+    /// orchestrator each replay step so all layers rotate Q/K with
+    /// the current-step position.
+    public static func setOffsetOnAll(_ array: MLXArray) {
+        _registryLock.lock()
+        let handles = _registry.compactMap { $0.ref }
+        _registryLock.unlock()
+        for h in handles {
+            h.setBufferPtr(slot: .offset, array: array)
+        }
+    }
+
+    public static var liveHandleCount: Int {
+        _registryLock.lock()
+        defer { _registryLock.unlock() }
+        return _registry.compactMap { $0.ref }.count
     }
 }
 
@@ -265,9 +316,11 @@ public final class PersistentRopeFreqsAbHandle {
             "mlx_metal_persistent_ab_new_rope_freqs failed (see mlx error log)"
         )
         self.ctx = handle
+        Self.register(self)
     }
 
     deinit {
+        Self.unregister(self)
         _ = mlx_metal_persistent_ab_free(ctx)
     }
 
@@ -277,5 +330,46 @@ public final class PersistentRopeFreqsAbHandle {
 
     public func setScalar64(slot: Slot, value: UInt64) {
         _ = mlx_metal_persistent_ab_set_scalar64(ctx, slot.rawValue, value)
+    }
+
+    public func setBufferPtr(slot: Slot, array: MLXArray) {
+        _ = mlx_metal_persistent_ab_set_buffer_ptr(ctx, slot.rawValue, array.ctx)
+    }
+
+    // MARK: - Decode-loop registry
+
+    private static let _registryLock = NSLock()
+    nonisolated(unsafe) private static var _registry: [WeakHandle] = []
+
+    private struct WeakHandle {
+        weak var ref: PersistentRopeFreqsAbHandle?
+    }
+
+    private static func register(_ h: PersistentRopeFreqsAbHandle) {
+        _registryLock.lock()
+        defer { _registryLock.unlock() }
+        _registry.removeAll { $0.ref == nil }
+        _registry.append(WeakHandle(ref: h))
+    }
+
+    private static func unregister(_ h: PersistentRopeFreqsAbHandle) {
+        _registryLock.lock()
+        defer { _registryLock.unlock() }
+        _registry.removeAll { $0.ref === h || $0.ref == nil }
+    }
+
+    public static func setOffsetOnAll(_ array: MLXArray) {
+        _registryLock.lock()
+        let handles = _registry.compactMap { $0.ref }
+        _registryLock.unlock()
+        for h in handles {
+            h.setBufferPtr(slot: .offset, array: array)
+        }
+    }
+
+    public static var liveHandleCount: Int {
+        _registryLock.lock()
+        defer { _registryLock.unlock() }
+        return _registry.compactMap { $0.ref }.count
     }
 }

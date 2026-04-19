@@ -417,6 +417,24 @@ int mlx_metal_persistent_ab_set_scalar64(
     uint64_t value);
 
 /**
+ * Write a BufferPtrOffset slot on a persistent AB — overwrite the
+ * AB's stored `(buffer_addr, offset)` pair at `slot` with the
+ * MTLBuffer underlying `array` (offset included from the array's
+ * storage). `slot` must reference a BufferPtrOffset slot in the
+ * handle's layout.
+ *
+ * Used by the decode-loop ICB orchestrator to retarget per-step
+ * buffer-pointer slots (e.g. RoPE's `offset` slot) on a persistent
+ * AB that's already been recorded into an ICB — the AB's buffer
+ * contents are mutated in place, so the recorded dispatch picks up
+ * the new pointer without needing a kernel re-bind.
+ */
+int mlx_metal_persistent_ab_set_buffer_ptr(
+    mlx_metal_persistent_ab ab,
+    int slot,
+    const mlx_array array);
+
+/**
  * Release a persistent AB. Safe to pass a handle whose `ctx` is NULL.
  * The underlying MTLBuffer is returned to the pool.
  */
