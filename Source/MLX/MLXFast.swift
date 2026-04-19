@@ -323,6 +323,71 @@ public enum MLXFast {
         return MLXArray(result)
     }
 
+    /// RoPE single-token base-path overload that participates in
+    /// decode-loop ICB replay via a caller-owned
+    /// `PersistentRopeAbHandle`. Numerically identical to the plain
+    /// `RoPE(_:dimensions:traditional:base:scale:offset:freqs:stream:)`
+    /// for the T==1 contiguous case (the only case where the AB single-
+    /// token kernel fires). For prefill / multi-token / non-contiguous
+    /// inputs the handle is silently unused and the legacy path runs.
+    ///
+    /// When `handle` is `nil` this reduces to the plain RoPE call.
+    public static func ropeAb(
+        _ array: MLXArray,
+        dimensions: Int,
+        traditional: Bool,
+        base: Float?,
+        scale: Float,
+        offset: MLXArray,
+        freqs: MLXArray? = nil,
+        handle: PersistentRopeAbHandle?,
+        stream: StreamOrDevice = .default
+    ) -> MLXArray {
+        guard let handle else {
+            return RoPE(
+                array, dimensions: dimensions, traditional: traditional,
+                base: base, scale: scale, offset: offset, freqs: freqs,
+                stream: stream)
+        }
+        var result = mlx_array_new()
+        let baseOpt = mlx_optional_float(value: base ?? 0, has_value: base != nil)
+        mlx_fast_rope_ab(
+            &result,
+            array.ctx, Int32(dimensions), traditional, baseOpt, scale,
+            offset.ctx, (freqs ?? .mlxNone).ctx, handle.ctx, stream.ctx)
+        return MLXArray(result)
+    }
+
+    /// RoPE single-token freqs-path overload — same as `ropeAb` above
+    /// but takes a `PersistentRopeFreqsAbHandle` for the 7-slot
+    /// (freqs-supplied) layout. Use this when the model passes
+    /// precomputed RoPE frequencies (typical for YarnRoPE etc.).
+    public static func ropeAb(
+        _ array: MLXArray,
+        dimensions: Int,
+        traditional: Bool,
+        base: Float?,
+        scale: Float,
+        offset: MLXArray,
+        freqs: MLXArray,
+        handle: PersistentRopeFreqsAbHandle?,
+        stream: StreamOrDevice = .default
+    ) -> MLXArray {
+        guard let handle else {
+            return RoPE(
+                array, dimensions: dimensions, traditional: traditional,
+                base: base, scale: scale, offset: offset, freqs: freqs,
+                stream: stream)
+        }
+        var result = mlx_array_new()
+        let baseOpt = mlx_optional_float(value: base ?? 0, has_value: base != nil)
+        mlx_fast_rope_ab(
+            &result,
+            array.ctx, Int32(dimensions), traditional, baseOpt, scale,
+            offset.ctx, freqs.ctx, handle.ctx, stream.ctx)
+        return MLXArray(result)
+    }
+
     /// Fused RMSNorm + Residual Add operation.
     ///
     /// Computes `residual + rmsNorm(x, weight, eps)` in a single Metal dispatch.

@@ -255,6 +255,17 @@ int mlx_fast_rope_dynamic(
     const mlx_array offset,
     const mlx_array freqs /* may be null */,
     const mlx_stream s);
+int mlx_fast_rope_ab(
+    mlx_array* res,
+    const mlx_array x,
+    int dims,
+    bool traditional,
+    mlx_optional_float base,
+    float scale,
+    const mlx_array offset,
+    const mlx_array freqs /* may be null */,
+    mlx_metal_persistent_ab ab_handle,
+    const mlx_stream s);
 int mlx_fast_scaled_dot_product_attention(
     mlx_array* res,
     const mlx_array queries,

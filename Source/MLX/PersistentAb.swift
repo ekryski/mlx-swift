@@ -131,3 +131,99 @@ public final class PersistentSdpaAbHandle {
         _ = mlx_metal_persistent_ab_set_float32(ctx, slot.rawValue, value)
     }
 }
+
+/// Persistent argument buffer for the single-token RoPE base-path
+/// kernel (6 slots). Use this for layers where `freqs` is not
+/// supplied — the offset is consumed from a device buffer at dispatch
+/// time, so per-step decoding only requires updating that buffer's
+/// contents (mlx C++ rewrites the `offset` pointer per call).
+///
+/// Layout (matches `RoPE::eval_gpu` AB branch, base path):
+///   0: BufferPtrOffset  in
+///   1: BufferPtrOffset  out
+///   2: BufferPtrOffset  offset
+///   3: Float32          scale
+///   4: Scalar64         stride
+///   5: Float32          base   (= log2(theta_base))
+public final class PersistentRopeAbHandle {
+    public enum Slot: Int32 {
+        case `in` = 0
+        case out = 1
+        case offset = 2
+        case scale = 3
+        case stride = 4
+        case base = 5
+    }
+
+    internal var ctx: mlx_metal_persistent_ab
+
+    public init(stream: StreamOrDevice = .default) {
+        var handle = mlx_metal_persistent_ab(ctx: nil)
+        let rc = mlx_metal_persistent_ab_new_rope(&handle, stream.ctx)
+        precondition(
+            rc == 0 && handle.ctx != nil,
+            "mlx_metal_persistent_ab_new_rope failed (see mlx error log)"
+        )
+        self.ctx = handle
+    }
+
+    deinit {
+        _ = mlx_metal_persistent_ab_free(ctx)
+    }
+
+    public func setFloat32(slot: Slot, value: Float) {
+        _ = mlx_metal_persistent_ab_set_float32(ctx, slot.rawValue, value)
+    }
+
+    public func setScalar64(slot: Slot, value: UInt64) {
+        _ = mlx_metal_persistent_ab_set_scalar64(ctx, slot.rawValue, value)
+    }
+}
+
+/// Persistent argument buffer for the single-token RoPE freqs-path
+/// kernel (7 slots). Use this when the model supplies precomputed
+/// `freqs` (typical for YarnRoPE / scaled RoPE variants).
+///
+/// Layout:
+///   0: BufferPtrOffset  in
+///   1: BufferPtrOffset  out
+///   2: BufferPtrOffset  offset
+///   3: Float32          scale
+///   4: Scalar64         stride
+///   5: BufferPtrOffset  freqs
+///   6: Scalar64         freq_stride
+public final class PersistentRopeFreqsAbHandle {
+    public enum Slot: Int32 {
+        case `in` = 0
+        case out = 1
+        case offset = 2
+        case scale = 3
+        case stride = 4
+        case freqs = 5
+        case freqStride = 6
+    }
+
+    internal var ctx: mlx_metal_persistent_ab
+
+    public init(stream: StreamOrDevice = .default) {
+        var handle = mlx_metal_persistent_ab(ctx: nil)
+        let rc = mlx_metal_persistent_ab_new_rope_freqs(&handle, stream.ctx)
+        precondition(
+            rc == 0 && handle.ctx != nil,
+            "mlx_metal_persistent_ab_new_rope_freqs failed (see mlx error log)"
+        )
+        self.ctx = handle
+    }
+
+    deinit {
+        _ = mlx_metal_persistent_ab_free(ctx)
+    }
+
+    public func setFloat32(slot: Slot, value: Float) {
+        _ = mlx_metal_persistent_ab_set_float32(ctx, slot.rawValue, value)
+    }
+
+    public func setScalar64(slot: Slot, value: UInt64) {
+        _ = mlx_metal_persistent_ab_set_scalar64(ctx, slot.rawValue, value)
+    }
+}
