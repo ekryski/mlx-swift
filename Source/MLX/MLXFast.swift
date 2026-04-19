@@ -247,6 +247,38 @@ public enum MLXFast {
         return MLXArray(result)
     }
 
+    /// SDPA overload that participates in decode-loop ICB replay via a
+    /// caller-owned `PersistentSdpaAbHandle`. Identical numerically to
+    /// `scaledDotProductAttention(queries:keys:values:scale:mask:sinks:stream:)`,
+    /// but binds the handle's stable argument buffer — so an ICB
+    /// recording of this call replays correctly after per-step scalar
+    /// updates (chiefly `N`/T_k).
+    ///
+    /// When `handle` is nil, reduces to the plain overload.
+    public static func scaledDotProductAttentionAb(
+        queries: MLXArray, keys: MLXArray, values: MLXArray, scale: Float,
+        mask: ScaledDotProductAttentionMaskMode,
+        sinks: MLXArray? = nil,
+        handle: PersistentSdpaAbHandle?,
+        stream: StreamOrDevice = .default
+    ) -> MLXArray {
+        guard let handle else {
+            return scaledDotProductAttention(
+                queries: queries, keys: keys, values: values, scale: scale,
+                mask: mask, sinks: sinks, stream: stream)
+        }
+        var result = mlx_array_new()
+        let window = mask.windowSize
+        mlx_fast_scaled_dot_product_attention_ab(
+            &result,
+            queries.ctx, keys.ctx, values.ctx, scale,
+            mask.mode, mask.mask?.ctx ?? MLXArray.mlxNone.ctx,
+            (sinks ?? .mlxNone).ctx,
+            handle.ctx, stream.ctx,
+            Int32(window))
+        return MLXArray(result)
+    }
+
     /// Root Mean Square normalization (RMS norm).
     ///
     /// The normalization is with respect to the last axis of the input `x`.

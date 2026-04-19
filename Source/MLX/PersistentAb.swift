@@ -79,3 +79,55 @@ public final class PersistentRmsAbHandle {
         _ = mlx_metal_persistent_ab_set_scalar32(ctx, slot.rawValue, value)
     }
 }
+
+/// Persistent argument buffer for the unified vector SDPA kernel.
+/// 18-slot layout matching `SdpaUnifiedArgs` in
+/// `kernels/sdpa_unified.h`. Per-decode-step the caller writes `.N`
+/// (T_k) to reflect the current K-sequence length; mlx C++ handles
+/// buffer pointers and most other scalars internally per call.
+public final class PersistentSdpaAbHandle {
+    public enum Slot: Int32 {
+        case queries = 0
+        case keys = 1
+        case values = 2
+        case out = 3
+        case mask = 4
+        case sinks = 5
+        case kHeadStride = 6
+        case kSeqStride = 7
+        case vHeadStride = 8
+        case vSeqStride = 9
+        case scale = 10
+        case gqaFactor = 11
+        case N = 12
+        case blocks = 13
+        case maskKvSeqStride = 14
+        case maskQSeqStride = 15
+        case maskHeadStride = 16
+        case numQHeads = 17
+    }
+
+    internal var ctx: mlx_metal_persistent_ab
+
+    public init(stream: StreamOrDevice = .default) {
+        var handle = mlx_metal_persistent_ab(ctx: nil)
+        let rc = mlx_metal_persistent_ab_new_sdpa(&handle, stream.ctx)
+        precondition(
+            rc == 0 && handle.ctx != nil,
+            "mlx_metal_persistent_ab_new_sdpa failed (see mlx error log)"
+        )
+        self.ctx = handle
+    }
+
+    deinit {
+        _ = mlx_metal_persistent_ab_free(ctx)
+    }
+
+    public func setScalar32(slot: Slot, value: UInt32) {
+        _ = mlx_metal_persistent_ab_set_scalar32(ctx, slot.rawValue, value)
+    }
+
+    public func setFloat32(slot: Slot, value: Float) {
+        _ = mlx_metal_persistent_ab_set_float32(ctx, slot.rawValue, value)
+    }
+}

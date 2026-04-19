@@ -182,6 +182,26 @@ int mlx_fast_rms_norm_ab(
     float eps,
     mlx_metal_persistent_ab ab_handle,
     const mlx_stream s);
+
+/**
+ * SDPA overload that participates in decode-loop ICB replay via a
+ * caller-owned PersistentAb. The handle's MTLBuffer address is
+ * stable across calls; mask_mode accepts "", "causal", or "array".
+ * When `ab_handle.ctx` is NULL, behavior is identical to the plain
+ * mlx_fast_scaled_dot_product_attention.
+ */
+int mlx_fast_scaled_dot_product_attention_ab(
+    mlx_array* res,
+    const mlx_array queries,
+    const mlx_array keys,
+    const mlx_array values,
+    float scale,
+    const char* mask_mode /* "" | "causal" | "array" */,
+    const mlx_array mask_arr /* may be null */,
+    const mlx_array sinks /* may be null */,
+    mlx_metal_persistent_ab ab_handle,
+    const mlx_stream s,
+    int window_size);
 int mlx_fast_rms_norm_residual(
     mlx_array* res,
     const mlx_array x,

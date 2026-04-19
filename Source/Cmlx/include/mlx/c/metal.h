@@ -209,6 +209,27 @@ int mlx_metal_persistent_ab_new_rmsnorm(
     mlx_stream stream);
 
 /**
+ * Create a PersistentAb pre-configured for SDPA (unified vector
+ * kernel). 18-slot layout matching SdpaUnifiedArgs in
+ * kernels/sdpa_unified.h:
+ *   0-5:  BufferPtrOffset   queries, keys, values, out, mask, sinks
+ *   6-9:  Scalar64          k_head_stride, k_seq_stride,
+ *                           v_head_stride, v_seq_stride
+ *   10:   Float32           scale
+ *   11-17:Scalar32          gqa_factor, N (T_k), blocks,
+ *                           mask_kv_seq_stride, mask_q_seq_stride,
+ *                           mask_head_stride, num_q_heads
+ *
+ * Buffer-ptr slots (0-5) + most scalars are populated by mlx C++
+ * per call. The caller may additionally update N (slot 12, T_k)
+ * between ICB replays to reflect the current decode step's
+ * K-sequence length.
+ */
+int mlx_metal_persistent_ab_new_sdpa(
+    mlx_metal_persistent_ab* out,
+    mlx_stream stream);
+
+/**
  * Write a Float32 slot on a persistent AB. `slot` must reference
  * a Float32 slot in the handle's layout.
  */
