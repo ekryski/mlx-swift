@@ -352,9 +352,11 @@ int mlx_metal_persistent_ab_new_rmsnorm(
  *                           mask_head_stride, num_q_heads
  *
  * Buffer-ptr slots (0-5) + most scalars are populated by mlx C++
- * per call. The caller may additionally update N (slot 12, T_k)
- * between ICB replays to reflect the current decode step's
- * K-sequence length.
+ * per call. Per-step N (T_k) is NOT a slot in this AB — it's bound
+ * as a direct kernel buffer at slot 1 so the decode-loop orchestrator
+ * can override it race-free via the tag-binding override path.
+ * Register the override name via
+ * `mlx_metal_persistent_ab_set_scalar_binding_name`.
  */
 int mlx_metal_persistent_ab_new_sdpa(
     mlx_metal_persistent_ab* out,
@@ -462,6 +464,20 @@ int mlx_metal_persistent_ab_set_buffer_ptr(
     mlx_metal_persistent_ab ab,
     int slot,
     const mlx_array array);
+
+/**
+ * Register a tag-binding name for this handle's scalar side-buffer
+ * (e.g. SDPA N, bound at kernel slot 1 on every record-time dispatch
+ * driven by this handle). Pass 0 to clear. At the next ICB record,
+ * the primitive's eval_gpu auto-tags the scalar buffer under this
+ * name so the orchestrator can override it per replay step via
+ * `replay(overrides:)`.
+ *
+ * One-shot registration — call once, before the first ICB record.
+ */
+int mlx_metal_persistent_ab_set_scalar_binding_name(
+    mlx_metal_persistent_ab ab,
+    uint32_t name_id);
 
 /**
  * Release a persistent AB. Safe to pass a handle whose `ctx` is NULL.

@@ -79,6 +79,23 @@ mlx_stream mlx_default_cpu_stream_new(void);
  */
 mlx_stream mlx_default_gpu_stream_new(void);
 
+/**
+ * Synchronize every GPU stream known to mlx (every stream ever
+ * registered via `new_stream`, including secondary streams used by
+ * MoE experts, caller-supplied streams on fast primitives, etc.).
+ * On return, no GPU work is in flight on any tracked stream.
+ *
+ * Used by the decode-loop ICB orchestrator to drain sibling streams
+ * before `begin_icb_recording` — `mlx_synchronize(default_stream)`
+ * only reaches one stream, which misses MoE / gated-delta / other
+ * parallel-dispatched kernels that may still be writing to KV or
+ * activation buffers the record step is about to capture.
+ *
+ * `n_synced` may be NULL; if non-NULL, receives the count of GPU
+ * streams drained.
+ */
+int mlx_synchronize_all_gpu_streams(size_t* n_synced);
+
 /**@}*/
 
 #ifdef __cplusplus

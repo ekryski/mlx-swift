@@ -81,10 +81,12 @@ public final class PersistentRmsAbHandle {
 }
 
 /// Persistent argument buffer for the unified vector SDPA kernel.
-/// 18-slot layout matching `SdpaUnifiedArgs` in
-/// `kernels/sdpa_unified.h`. Per-decode-step the caller writes `.N`
-/// (T_k) to reflect the current K-sequence length; mlx C++ handles
-/// buffer pointers and most other scalars internally per call.
+/// 17-slot layout matching `SdpaUnifiedArgs` in
+/// `kernels/sdpa_unified.h`. Per-step N (T_k) is NOT a slot in this
+/// AB — it's bound as a direct kernel buffer at slot 1, tagged via a
+/// `BindingName`, and overridden per replay step through
+/// `IndirectCommandBuffer.replay(overrides:)`. Call
+/// `registerNBinding` once at construction to enable auto-tagging.
 public final class PersistentSdpaAbHandle {
     public enum Slot: Int32 {
         case queries = 0
@@ -99,12 +101,11 @@ public final class PersistentSdpaAbHandle {
         case vSeqStride = 9
         case scale = 10
         case gqaFactor = 11
-        case N = 12
-        case blocks = 13
-        case maskKvSeqStride = 14
-        case maskQSeqStride = 15
-        case maskHeadStride = 16
-        case numQHeads = 17
+        case blocks = 12
+        case maskKvSeqStride = 13
+        case maskQSeqStride = 14
+        case maskHeadStride = 15
+        case numQHeads = 16
     }
 
     internal var ctx: mlx_metal_persistent_ab
@@ -133,12 +134,28 @@ public final class PersistentSdpaAbHandle {
         _ = mlx_metal_persistent_ab_set_float32(ctx, slot.rawValue, value)
     }
 
+    /// One-shot register the `BindingName` under which this handle's
+    /// N-buffer (the side-buffer bound at kernel slot 1) should be
+    /// tagged during ICB recording. After this call, every ICB
+    /// recording of an SDPA dispatch using this handle emits a
+    /// tag-binding at `name` on the handle's N-buffer — so the
+    /// orchestrator can rewrite slot 1 per replay step via
+    /// `IndirectCommandBuffer.replay(overrides: [name: freshN])`,
+    /// race-free with any in-flight GPU work on prior steps.
+    ///
+    /// Call once at handle construction (or at least before the
+    /// record step). Not thread-safe — should not race with the
+    /// eval_gpu that reads it.
+    public func registerNBinding(_ name: BindingName) {
+        _ = mlx_metal_persistent_ab_set_scalar_binding_name(
+            ctx, name.rawValue)
+    }
+
     // MARK: - Decode-loop registry
     //
     // Every live `PersistentSdpaAbHandle` registers itself here so the
-    // decode-loop ICB orchestrator in `TokenIterator` can update the
-    // per-step `N` (T_k) scalar on every handle without needing
-    // per-model plumbing to reach each attention block's handle.
+    // decode-loop ICB orchestrator can iterate handles in layer order
+    // to install per-step N-binding overrides.
     //
     // The registry holds weak refs; deinit removes the entry. Thread-
     // safe via a simple lock — decode is single-threaded, so contention
@@ -164,37 +181,24 @@ public final class PersistentSdpaAbHandle {
         _registry.removeAll { $0.ref === h || $0.ref == nil }
     }
 
-    /// Update the `N` (T_k) slot on every live SDPA handle. Called by
-    /// the decode-loop ICB orchestrator each replay step so all
-    /// attention layers attend to the current K-sequence length.
-    ///
-    /// This sets the SAME `N` on every layer — use only when every
-    /// attention layer sees the same K-sequence length. For models
-    /// with mixed layer types (e.g. GPT-OSS sliding + full
-    /// attention, where sliding is capped at `windowSize` once the
-    /// window rolls) use `updateNPerLayer` instead.
-    public static func updateNOnAll(_ n: UInt32) {
+    /// Register a per-layer N-binding name on every live SDPA handle
+    /// in registration order. `names[i]` is applied to handle `i`;
+    /// entries past `names.count` are left unchanged.
+    public static func registerNBindings(_ names: [BindingName]) {
         _registryLock.lock()
         let handles = _registry.compactMap { $0.ref }
         _registryLock.unlock()
-        for h in handles {
-            h.setScalar32(slot: .N, value: n)
+        for (i, h) in handles.enumerated() where i < names.count {
+            h.registerNBinding(names[i])
         }
     }
 
-    /// Update each handle's `N` (T_k) slot to the corresponding
-    /// entry in `ns`. Index i maps to the i-th registered handle,
-    /// which — provided handles register in layer order at model
-    /// init — corresponds to layer i's attention block. Entries
-    /// beyond `ns.count` are left unchanged; if fewer handles are
-    /// live than `ns` entries, the trailing entries are ignored.
-    public static func updateNPerLayer(_ ns: [UInt32]) {
+    /// Snapshot of the live handles in registration (layer) order.
+    /// Holds strong refs; don't retain the result across decode steps.
+    public static var liveHandles: [PersistentSdpaAbHandle] {
         _registryLock.lock()
-        let handles = _registry.compactMap { $0.ref }
-        _registryLock.unlock()
-        for (i, h) in handles.enumerated() where i < ns.count {
-            h.setScalar32(slot: .N, value: ns[i])
-        }
+        defer { _registryLock.unlock() }
+        return _registry.compactMap { $0.ref }
     }
 
     /// Number of live handles — diagnostic.
@@ -206,26 +210,25 @@ public final class PersistentSdpaAbHandle {
 }
 
 /// Persistent argument buffer for the single-token RoPE base-path
-/// kernel (6 slots). Use this for layers where `freqs` is not
-/// supplied — the offset is consumed from a device buffer at dispatch
-/// time, so per-step decoding only requires updating that buffer's
-/// contents (mlx C++ rewrites the `offset` pointer per call).
+/// kernel (5 slots). Per-step `offset` is NOT a slot in this AB —
+/// it's bound as a direct kernel buffer at slot 1 and overridden per
+/// replay step via `IndirectCommandBuffer.replay(overrides:)`.
+/// Call `registerOffsetBinding` once at construction to enable
+/// auto-tagging during record.
 ///
 /// Layout (matches `RoPE::eval_gpu` AB branch, base path):
 ///   0: BufferPtrOffset  in
 ///   1: BufferPtrOffset  out
-///   2: BufferPtrOffset  offset
-///   3: Float32          scale
-///   4: Scalar64         stride
-///   5: Float32          base   (= log2(theta_base))
+///   2: Float32          scale
+///   3: Scalar64         stride
+///   4: Float32          base   (= log2(theta_base))
 public final class PersistentRopeAbHandle {
     public enum Slot: Int32 {
         case `in` = 0
         case out = 1
-        case offset = 2
-        case scale = 3
-        case stride = 4
-        case base = 5
+        case scale = 2
+        case stride = 3
+        case base = 4
     }
 
     internal var ctx: mlx_metal_persistent_ab
@@ -254,12 +257,13 @@ public final class PersistentRopeAbHandle {
         _ = mlx_metal_persistent_ab_set_scalar64(ctx, slot.rawValue, value)
     }
 
-    /// Retarget a BufferPtrOffset slot (e.g. `.offset`) to the storage
-    /// underlying `array`. Used by the decode-loop iterator to point
-    /// the recorded RoPE AB at this step's offset MLXArray without
-    /// re-recording the ICB.
-    public func setBufferPtr(slot: Slot, array: MLXArray) {
-        _ = mlx_metal_persistent_ab_set_buffer_ptr(ctx, slot.rawValue, array.ctx)
+    /// One-shot register the `BindingName` under which the per-step
+    /// offset buffer (bound at kernel slot 1) should be tagged
+    /// during ICB recording. Same mechanism as
+    /// `PersistentSdpaAbHandle.registerNBinding`.
+    public func registerOffsetBinding(_ name: BindingName) {
+        _ = mlx_metal_persistent_ab_set_scalar_binding_name(
+            ctx, name.rawValue)
     }
 
     // MARK: - Decode-loop registry
@@ -284,16 +288,16 @@ public final class PersistentRopeAbHandle {
         _registry.removeAll { $0.ref === h || $0.ref == nil }
     }
 
-    /// Retarget every live base-path RoPE handle's `.offset` slot to
-    /// `array`'s underlying storage. Called by the decode-loop ICB
-    /// orchestrator each replay step so all layers rotate Q/K with
-    /// the current-step position.
-    public static func setOffsetOnAll(_ array: MLXArray) {
+    /// Register the supplied binding name on every live base-path
+    /// RoPE handle. All layers share the same name, so a single
+    /// `overrides[name] = newOffset` rewrites every recorded slot-1
+    /// bind in one pass.
+    public static func registerOffsetBindingOnAll(_ name: BindingName) {
         _registryLock.lock()
         let handles = _registry.compactMap { $0.ref }
         _registryLock.unlock()
         for h in handles {
-            h.setBufferPtr(slot: .offset, array: array)
+            h.registerOffsetBinding(name)
         }
     }
 
@@ -305,26 +309,25 @@ public final class PersistentRopeAbHandle {
 }
 
 /// Persistent argument buffer for the single-token RoPE freqs-path
-/// kernel (7 slots). Use this when the model supplies precomputed
-/// `freqs` (typical for YarnRoPE / scaled RoPE variants).
+/// kernel (6 slots). Per-step `offset` is NOT a slot — bound at
+/// kernel slot 1 with override-based retargeting. Use this when
+/// the model supplies precomputed `freqs` (YarnRoPE / scaled RoPE).
 ///
 /// Layout:
 ///   0: BufferPtrOffset  in
 ///   1: BufferPtrOffset  out
-///   2: BufferPtrOffset  offset
-///   3: Float32          scale
-///   4: Scalar64         stride
-///   5: BufferPtrOffset  freqs
-///   6: Scalar64         freq_stride
+///   2: Float32          scale
+///   3: Scalar64         stride
+///   4: BufferPtrOffset  freqs
+///   5: Scalar64         freq_stride
 public final class PersistentRopeFreqsAbHandle {
     public enum Slot: Int32 {
         case `in` = 0
         case out = 1
-        case offset = 2
-        case scale = 3
-        case stride = 4
-        case freqs = 5
-        case freqStride = 6
+        case scale = 2
+        case stride = 3
+        case freqs = 4
+        case freqStride = 5
     }
 
     internal var ctx: mlx_metal_persistent_ab
@@ -357,6 +360,14 @@ public final class PersistentRopeFreqsAbHandle {
         _ = mlx_metal_persistent_ab_set_buffer_ptr(ctx, slot.rawValue, array.ctx)
     }
 
+    /// One-shot register the `BindingName` under which the per-step
+    /// offset buffer (bound at kernel slot 1) should be tagged
+    /// during ICB recording.
+    public func registerOffsetBinding(_ name: BindingName) {
+        _ = mlx_metal_persistent_ab_set_scalar_binding_name(
+            ctx, name.rawValue)
+    }
+
     // MARK: - Decode-loop registry
 
     private static let _registryLock = NSLock()
@@ -379,12 +390,12 @@ public final class PersistentRopeFreqsAbHandle {
         _registry.removeAll { $0.ref === h || $0.ref == nil }
     }
 
-    public static func setOffsetOnAll(_ array: MLXArray) {
+    public static func registerOffsetBindingOnAll(_ name: BindingName) {
         _registryLock.lock()
         let handles = _registry.compactMap { $0.ref }
         _registryLock.unlock()
         for h in handles {
-            h.setBufferPtr(slot: .offset, array: array)
+            h.registerOffsetBinding(name)
         }
     }
 
@@ -395,26 +406,21 @@ public final class PersistentRopeFreqsAbHandle {
     }
 }
 
-/// Persistent argument buffer for the `gather_front_ab` kernel (5
-/// slots). Used by the ICB decode-loop orchestrator to keep the
-/// embedding-gather's indices-buffer pointer mutable across replays.
-/// Without it, the record-step's input token is frozen into the AB
-/// and every replay reuses the same embedding vector (the "WeWeWe"
-/// loop symptom).
+/// Persistent argument buffer for the `gather_front_ab` kernel (4
+/// slots). Per-step `indices` is NOT a slot — bound at kernel slot 1
+/// and overridden per replay step via the tag-binding path.
 ///
 /// Layout:
 ///   0: BufferPtrOffset  src      (weight table; stable across steps)
-///   1: BufferPtrOffset  indices  (per-step input token buffer)
-///   2: BufferPtrOffset  out      (destination; stable across steps)
-///   3: Scalar64         stride
-///   4: Scalar32         size
+///   1: BufferPtrOffset  out      (destination; stable across steps)
+///   2: Scalar64         stride
+///   3: Scalar32         size
 public final class PersistentGatherFrontAbHandle {
     public enum Slot: Int32 {
         case src = 0
-        case indices = 1
-        case out = 2
-        case stride = 3
-        case size = 4
+        case out = 1
+        case stride = 2
+        case size = 3
     }
 
     internal var ctx: mlx_metal_persistent_ab
@@ -454,6 +460,14 @@ public final class PersistentGatherFrontAbHandle {
         _ = mlx_metal_clear_next_gather_front_persistent_abs()
     }
 
+    /// One-shot register the `BindingName` under which the per-step
+    /// indices buffer (bound at kernel slot 1) should be tagged
+    /// during ICB recording.
+    public func registerIndicesBinding(_ name: BindingName) {
+        _ = mlx_metal_persistent_ab_set_scalar_binding_name(
+            ctx, name.rawValue)
+    }
+
     // MARK: - Decode-loop registry
 
     private static let _registryLock = NSLock()
@@ -476,15 +490,16 @@ public final class PersistentGatherFrontAbHandle {
         _registry.removeAll { $0.ref === h || $0.ref == nil }
     }
 
-    /// Retarget the `indices` slot (slot 1) on every live handle to
-    /// point at the supplied array's buffer. Call this between ICB
-    /// replays to update the embedding gather's input-token pointer.
-    public static func setIndicesPtrOnAll(_ array: MLXArray) {
+    /// Register the supplied binding name on every live gather_front
+    /// handle. All three gathers in a QuantizedEmbedding lookup share
+    /// the same name, so one override entry rewrites every slot-1
+    /// bind.
+    public static func registerIndicesBindingOnAll(_ name: BindingName) {
         _registryLock.lock()
         let handles = _registry.compactMap { $0.ref }
         _registryLock.unlock()
         for h in handles {
-            h.setBufferPtr(slot: .indices, array: array)
+            h.registerIndicesBinding(name)
         }
     }
 

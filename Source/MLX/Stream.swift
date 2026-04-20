@@ -172,6 +172,28 @@ public final class Stream: @unchecked Sendable, Equatable {
         }
     }
 
+    /// Synchronize every GPU stream known to mlx — every stream ever
+    /// registered via `new_stream`, including secondary streams used by
+    /// MoE expert dispatches, caller-supplied streams on fast
+    /// primitives, etc. On return, no GPU work is in flight on any
+    /// tracked stream.
+    ///
+    /// `Stream.defaultStream(.gpu).synchronize()` only drains one
+    /// stream (the thread's default); this helper drains them all.
+    /// Use before `IndirectCommandBuffer.record { ... }` when the
+    /// pre-record workload may have dispatched to sibling GPU
+    /// streams whose writes would otherwise race with the recorder.
+    ///
+    /// Returns the number of GPU streams synchronized (diagnostic).
+    @discardableResult
+    public static func synchronizeAllGpuStreams() -> Int {
+        var n: Int = 0
+        _ = evalLock.withLock {
+            mlx_synchronize_all_gpu_streams(&n)
+        }
+        return n
+    }
+
     /// Set this stream as the global default for all MLX operations.
     ///
     /// Matches Python's `mx.set_default_stream()`. Call BEFORE loading model
