@@ -173,6 +173,17 @@ int mlx_fast_rms_norm_residual(
     const mlx_array weight,
     float eps,
     const mlx_stream s);
+int mlx_fast_gather_rms_norm_qgemv(
+    mlx_array* res,
+    const mlx_array x,
+    const mlx_array norm_weight,
+    const mlx_array w,
+    const mlx_array scales,
+    const mlx_array biases,
+    const mlx_array indices,
+    float eps,
+    int group_size,
+    const mlx_stream s);
 int mlx_fast_fused_gate_activation(
     mlx_array* res,
     const mlx_array gate_up,

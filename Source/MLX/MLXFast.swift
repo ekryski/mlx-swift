@@ -291,6 +291,40 @@ public enum MLXFast {
         return MLXArray(result)
     }
 
+    /// Fused RMSNorm + gatherQuantizedMM for MoE decode (4-bit).
+    ///
+    /// Replaces `rmsNorm(x) → gatherQuantizedMM(...)` with a single Metal
+    /// dispatch per MoE expert slot. Used by the switch MLP's first
+    /// projection (gate+up).
+    ///
+    /// - Parameters:
+    ///   - x: input `[B, 1, 1, K]`
+    ///   - normWeight: RMSNorm weight `[K]`
+    ///   - w: quantized expert weights `[E, N, K / pack_factor]`
+    ///   - scales: per-group scales `[E, N, K / groupSize]`
+    ///   - biases: per-group biases `[E, N, K / groupSize]`
+    ///   - indices: expert ids per slot `[B, topK]`
+    ///   - eps: normalization epsilon
+    ///   - groupSize: quantization group size (typically 64)
+    public static func gatherRMSNormQuantizedGEMV(
+        _ x: MLXArray,
+        normWeight: MLXArray,
+        w: MLXArray,
+        scales: MLXArray,
+        biases: MLXArray,
+        indices: MLXArray,
+        eps: Float,
+        groupSize: Int = 64,
+        stream: StreamOrDevice = .default
+    ) -> MLXArray {
+        var result = mlx_array_new()
+        mlx_fast_gather_rms_norm_qgemv(
+            &result, x.ctx, normWeight.ctx,
+            w.ctx, scales.ctx, biases.ctx, indices.ctx,
+            eps, Int32(groupSize), stream.ctx)
+        return MLXArray(result)
+    }
+
     /// Activation variants supported by the fused dense gate+activation kernel.
     public enum DenseGateActivation: Int32, Sendable {
         case silu = 0
