@@ -295,6 +295,9 @@ public enum MLXFast {
     public enum DenseGateActivation: Int32, Sendable {
         case silu = 0
         case geluApprox = 1
+        /// Clipped SwiGLU (GPT-OSS). Both halves clamped to [-7, 7];
+        /// `out = gate·sigmoid(1.702·gate)·(up + 1)`.
+        case clippedSwiglu = 2
     }
 
     /// Fused dense gate+activation (inline SwiGLU/GeGLU) kernel.
