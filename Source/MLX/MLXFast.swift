@@ -732,25 +732,40 @@ extension MLXFast {
     }
 
     /// TurboFlash pass 2: cross-block online softmax reduction.
+    ///
+    /// `sinks` is an optional per-head logit array of shape `[nQHeads]`. When
+    /// non-nil the kernel folds `sinks[h]` into the global softmax denominator
+    /// (same semantics as `MLXFast.scaledDotProductAttention(... sinks:)`).
+    /// Pass `nQHeads` and `L` (query positions per head) so the kernel can
+    /// derive the per-query head index from the flattened `q_idx`.
     public static func turboFlashPass2(
         oPartials: MLXArray, mPartials: MLXArray, lPartials: MLXArray,
-        numBlocks: Int, dim: Int, stream: StreamOrDevice = .default
+        numBlocks: Int, dim: Int, nQHeads: Int = 1, L: Int = 1,
+        sinks: MLXArray? = nil,
+        stream: StreamOrDevice = .default
     ) -> MLXArray {
         var result = mlx_array_new()
-        mlx_fast_turbo_flash_pass2(&result, oPartials.ctx, mPartials.ctx, lPartials.ctx,
-            Int32(numBlocks), Int32(dim), stream.ctx)
+        mlx_fast_turbo_flash_pass2(
+            &result, oPartials.ctx, mPartials.ctx, lPartials.ctx,
+            Int32(numBlocks), Int32(dim), Int32(nQHeads), Int32(L),
+            (sinks ?? .mlxNone).ctx, stream.ctx)
         return MLXArray(result)
     }
 
-    /// TurboFlash pass 2 with fused output rotation.
+    /// TurboFlash pass 2 with fused output rotation. Same `sinks` semantics
+    /// as `turboFlashPass2` — applied before the inverse rotation matmul.
     public static func turboFlashPass2Fused(
         oPartials: MLXArray, mPartials: MLXArray, lPartials: MLXArray,
         valRotation: MLXArray,
-        numBlocks: Int, dim: Int, stream: StreamOrDevice = .default
+        numBlocks: Int, dim: Int, nQHeads: Int = 1, L: Int = 1,
+        sinks: MLXArray? = nil,
+        stream: StreamOrDevice = .default
     ) -> MLXArray {
         var result = mlx_array_new()
-        mlx_fast_turbo_flash_pass2_fused(&result, oPartials.ctx, mPartials.ctx, lPartials.ctx,
-            valRotation.ctx, Int32(numBlocks), Int32(dim), stream.ctx)
+        mlx_fast_turbo_flash_pass2_fused(
+            &result, oPartials.ctx, mPartials.ctx, lPartials.ctx,
+            valRotation.ctx, Int32(numBlocks), Int32(dim), Int32(nQHeads), Int32(L),
+            (sinks ?? .mlxNone).ctx, stream.ctx)
         return MLXArray(result)
     }
 
