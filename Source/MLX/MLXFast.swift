@@ -968,12 +968,14 @@ extension MLXFast {
         bits: Int,
         groupSize: Int,
         causal: Bool = false,
+        windowSize: Int = -1,
         mask: MLXArray? = nil,
         sinks: MLXArray? = nil,
         stream: StreamOrDevice = .default
     ) -> MLXArray {
         var result = mlx_array_new()
-        let maskMode = causal ? "causal" : ""
+        // Sliding window requires causal (matches the C++ entry-point check).
+        let maskMode = (causal || windowSize > 0) ? "causal" : ""
         mlx_fast_flash_quantized_sdpa(
             &result,
             queries.ctx,
@@ -984,6 +986,7 @@ extension MLXFast {
             maskMode,
             (mask ?? .mlxNone).ctx,
             (sinks ?? .mlxNone).ctx,
+            Int32(windowSize),
             stream.ctx)
         return MLXArray(result)
     }
