@@ -38,8 +38,10 @@ template <int KeyBits, int ValueBits, int Dim>
     const constant int& token_count [[buffer(8)]],
     const constant int& repeat_count [[buffer(9)]],
     const device bfloat* sinks [[buffer(10), function_constant(tf_has_sinks)]],
-    const constant int& num_q_heads [[buffer(11), function_constant(tf_has_sinks)]],
-    const constant int& window_size [[buffer(12), function_constant(tf_do_causal)]],
+    const constant int& num_q_heads
+    [[buffer(11), function_constant(tf_has_sinks)]],
+    const constant int& window_size
+    [[buffer(12), function_constant(tf_do_causal)]],
     uint3 tid [[threadgroup_position_in_grid]],
     uint3 tpg [[threadgroups_per_grid]],
     uint simd_gid [[simdgroup_index_in_threadgroup]],
@@ -97,11 +99,11 @@ template <int KeyBits, int ValueBits, int Dim>
   // Query slice (rotated + scaled by caller already).
   const device float* queries_thread =
       queries + q_offset * Dim + simd_lid * qk_per_thread;
-  #pragma clang loop unroll(full)
+#pragma clang loop unroll(full)
   for (int i = 0; i < qk_per_thread; i++) {
     q[i] = queries_thread[i];
   }
-  #pragma clang loop unroll(full)
+#pragma clang loop unroll(full)
   for (int i = 0; i < qk_per_thread; i++) {
     o[i] = 0;
   }
@@ -124,7 +126,7 @@ template <int KeyBits, int ValueBits, int Dim>
   }
 
   // Sliding window upper / lower bounds (causal mask).
-  int causal_upper = token_count - 1;  // L=1 decode case: last K position.
+  int causal_upper = token_count - 1; // L=1 decode case: last K position.
   int sliding_lower = -1;
   if (tf_do_causal && window_size > 0) {
     sliding_lower = causal_upper - window_size;
@@ -139,11 +141,10 @@ template <int KeyBits, int ValueBits, int Dim>
 
     if (use_key) {
       // Inline dequant K[i] for this thread's qk_per_thread dim slice.
-      const device uint32_t* k_packed_t =
-          k_packed_head + i * KEY_PACKED_WIDTH;
+      const device uint32_t* k_packed_t = k_packed_head + i * KEY_PACKED_WIDTH;
       U k_norm = static_cast<U>(k_norms_head[i]);
 
-      #pragma clang loop unroll(full)
+#pragma clang loop unroll(full)
       for (int j = 0; j < qk_per_thread; j++) {
         int d = simd_lid * qk_per_thread + j;
         if (d >= Dim) {
@@ -169,7 +170,7 @@ template <int KeyBits, int ValueBits, int Dim>
 
       // Score = q · k (Q already pre-scaled and pre-rotated).
       U score = 0;
-      #pragma clang loop unroll(full)
+#pragma clang loop unroll(full)
       for (int j = 0; j < qk_per_thread; j++) {
         score += q[j] * k[j];
       }
@@ -188,7 +189,7 @@ template <int KeyBits, int ValueBits, int Dim>
             v_packed_head + i * VAL_PACKED_WIDTH;
         U v_norm = static_cast<U>(v_norms_head[i]);
 
-        #pragma clang loop unroll(full)
+#pragma clang loop unroll(full)
         for (int j = 0; j < qk_per_thread; j++) {
           int d = simd_lid * qk_per_thread + j;
           if (d >= Dim) {
@@ -209,12 +210,12 @@ template <int KeyBits, int ValueBits, int Dim>
           v[j] = tg_val_codebook[val_idx] * v_norm;
         }
 
-        #pragma clang loop unroll(full)
+#pragma clang loop unroll(full)
         for (int j = 0; j < qk_per_thread; j++) {
           o[j] = o[j] * factor + exp_score * v[j];
         }
       } else {
-        #pragma clang loop unroll(full)
+#pragma clang loop unroll(full)
         for (int j = 0; j < qk_per_thread; j++) {
           o[j] = o[j] * factor;
         }
