@@ -278,6 +278,11 @@ int mlx_fast_flash_quantized_sdpa(
 // Spec 041 phase 1.1 follow-up: TurboQuant fused single-pass SDPA with sinks.
 // `sinks` is optional (`mlx_array{nullptr}` to omit). `window_size > 0`
 // requires `do_causal == true`.
+//
+// Spec 043 Phase 4: optional DC-bias inputs. Pass `mlx_array{nullptr}` for
+// all four to disable bias correction. Otherwise all four must be valid
+// arrays. When enabled the kernel applies `b[t] * rotated_ones[d]` to
+// the rotated K/V reconstruction — unlocks GPT-OSS-20B on A path.
 int mlx_fast_turbo_flash_sdpa_v(
     mlx_array* res,
     const mlx_array queries,
@@ -294,6 +299,10 @@ int mlx_fast_turbo_flash_sdpa_v(
     const mlx_array sinks,
     bool do_causal,
     int window_size,
+    const mlx_array k_bias,
+    const mlx_array v_bias,
+    const mlx_array k_rotated_ones,
+    const mlx_array v_rotated_ones,
     const mlx_stream s);
 
 // Spec 040: Mamba state-replay primitives. `mask` is optional.

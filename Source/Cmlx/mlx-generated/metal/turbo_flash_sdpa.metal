@@ -4,8 +4,8 @@
 #include <metal_stdlib>
 
 // clang-format off
-#include "utils.h"
-#include "turbo_flash_sdpa.h"
+#include "mlx/backend/metal/kernels/utils.h"
+#include "mlx/backend/metal/kernels/turbo_flash_sdpa.h"
 
 using namespace metal;
 
@@ -26,6 +26,10 @@ using namespace metal;
       const device bfloat*,                                                \
       const constant int&,                                                 \
       const constant int&,                                                 \
+      const device float*,                                                 \
+      const device float*,                                                 \
+      const device float*,                                                 \
+      const device float*,                                                 \
       uint3, uint3, uint, uint);
 
 // Cover the common GPT-OSS / Qwen / Gemma 4 head dims × the four bench

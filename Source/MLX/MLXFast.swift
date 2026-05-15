@@ -976,6 +976,13 @@ extension MLXFast {
         sinks: MLXArray? = nil,
         causal: Bool = false,
         windowSize: Int = -1,
+        // Spec 043 Phase 4 — optional DC-bias correction. Pass all four
+        // for the bias path (unlocks GPT-OSS-20B on A path) or none for
+        // the standard kernel.
+        keyBias: MLXArray? = nil,
+        valBias: MLXArray? = nil,
+        keyRotatedOnes: MLXArray? = nil,
+        valRotatedOnes: MLXArray? = nil,
         stream: StreamOrDevice = .default
     ) -> MLXArray {
         var result = mlx_array_new()
@@ -988,6 +995,10 @@ extension MLXFast {
             (sinks ?? .mlxNone).ctx,
             causal,
             Int32(windowSize),
+            (keyBias ?? .mlxNone).ctx,
+            (valBias ?? .mlxNone).ctx,
+            (keyRotatedOnes ?? .mlxNone).ctx,
+            (valRotatedOnes ?? .mlxNone).ctx,
             stream.ctx)
         return MLXArray(result)
     }
