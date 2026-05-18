@@ -11,7 +11,7 @@
 #include <metal_common>
 #include <metal_simdgroup>
 
-#include "mlx/backend/metal/kernels/utils.h"
+#include "utils.h"
 
 using namespace metal;
 

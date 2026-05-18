@@ -4,8 +4,8 @@
 #include <metal_stdlib>
 
 // clang-format off
-#include "mlx/backend/metal/kernels/utils.h"
-#include "mlx/backend/metal/kernels/turbo_flash_sdpa.h"
+#include "utils.h"
+#include "turbo_flash_sdpa.h"
 
 using namespace metal;
 
